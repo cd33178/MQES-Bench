@@ -778,7 +778,7 @@ Each suite file accepts global prompt configurations and an array of test cases 
 
 \# Clone the repository
 
-git clone https://github.com/your-org/MQES-Bench.git
+git clone https://github.com/cd33178/MQES-Bench.git
 
 cd MQES-Bench
 
