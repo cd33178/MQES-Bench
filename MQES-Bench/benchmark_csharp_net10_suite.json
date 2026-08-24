@@ -1,0 +1,207 @@
+{
+  "Name": "C# 14, .NET 10, Modern BCL & Advanced Syntax Suite",
+  "DefaultSystemPrompt": "You are a Principal C# Compiler Engineer and .NET Architect expert in C# 14, .NET 10 runtime specifications, CLR internals, type anti-constraints, and modern pattern matching.\n1. Provide modern, idiomatic C# 14 code solutions taking full advantage of the latest language specifications.\n2. Be precise with compiler-generated backing fields, extension blocks, span conversions, and BCL collections.\n3. Keep technical explanations clear, concise, and academically sound.",
+  "DefaultUserPromptSuffix": "MANDATORY OUTPUT CONSTRAINTS:\n1. Wrap code in ```csharp ... ``` blocks.\n2. Ensure code compiles cleanly against the latest .NET 10 preview compiler.\n3. Avoid conversational fluff.",
+  "DefaultJudgeSystemPrompt": "You are a strict technical evaluation judge for modern C# 14 and .NET 10 specifications.\n\nCRITICAL EVALUATION GUIDELINES (AVOID FALSE NEGATIVES):\n1. C# 14 / .NET 10 Features:\n   - Left-Hand Side (LHS) Null-Conditional Assignment ('a?.b?.Status = \"Updated\"' or '-=') is a valid C# 14 syntax enhancement.\n   - Extension Blocks ('extension Name for TargetType') supporting instance properties, static properties, and static methods are valid C# 14 specifications.\n   - Contextual 'field' keyword in property accessors and 'where T : allows ref struct' are valid modern .NET 10 specifications.\n   - 'CompareOptions.NumericOrdering' is the native .NET 10 natural string sorting option in System.Globalization.\n2. Modern BCL Additions:\n   - Acknowledge 'OrderedDictionary<TKey, TValue>', 'Tensor<T>', and 'System.Threading.Lock' as native .NET BCL types.\n3. Output Formatting:\n   - Output your decision on the very first line as:\n   VERDICT: PASS\n   or\n   VERDICT: FAIL\n\n   Followed by a brief one-sentence reason.",
+  "Tests": [
+    {
+      "Name": ".NET 10: Contextual 'field' Keyword in Properties",
+      "Category": ".NET 10 & C# 14",
+      "Prompt": "Analyze the following C# class where property validation is required:\n\npublic class UserProfile {\n    private string _displayName;\n    public string DisplayName {\n        get => _displayName;\n        set => _displayName = string.IsNullOrWhiteSpace(value) \n            ? throw new ArgumentException(\"Invalid name\") \n            : value.Trim();\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the new C# 14 (.NET 10) feature that allows direct access to the compiler-generated backing field without manually declaring an explicit private field '_displayName'.\n2. Refactor the property using the contextual keyword 'field' to eliminate the explicit private field.",
+      "Criteria": [
+        {
+          "Description": "Explains that C# 14 in .NET 10 introduces the contextual 'field' keyword to access the backing field without manually declaring a private member",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the property by removing '_displayName' and using 'field' inside the setter while keeping validation logic intact",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Extension Blocks for Static Members and Properties",
+      "Category": ".NET 10 & C# 14",
+      "Prompt": "In C# 14 (.NET 10), Extension Blocks introduce the ability to extend types with instance properties, static properties, and static extension methods.\n\nWrite a C# 14 extension block for 'DateTime' that defines:\n1. An 'IsWeekend' instance property (returns bool).\n2. A 'DefaultFormat' static property (returns string).\n\nOUTPUT INSTRUCTIONS:\n1. Provide the complete C# 14 code block wrapped in ```csharp ... ``` using the 'extension ... for DateTime' syntax.\n2. Immediately follow the code block with a concise 1-2 paragraph technical explanation confirming that C# 14 extension blocks support instance properties, static properties, and static extension methods.",
+      "Criteria": [
+        {
+          "Description": "Explains extension block syntax (extension Name for TargetType) in C# 14, noting that it supports instance properties, static properties, and static extension methods",
+          "Weight": 50
+        },
+        {
+          "Description": "Writes C# 14 code using the 'extension ... for DateTime' structure, implementing the requested members correctly",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Implicit Conversion to Span<T> and ReadOnlySpan<T>",
+      "Category": ".NET 10 & C# 14",
+      "Prompt": "Analyze calls to this high-performance C# method:\n\npublic void ProcessBuffer(ReadOnlySpan<byte> data) { ... }\n\n// Calling client code:\npublic void Execute() {\n    byte[] rawBytes = GetBytes();\n    ProcessBuffer(rawBytes.AsSpan());\n    \n    string text = \"log_entry_header\";\n    ProcessText(text.AsSpan());\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain how C# 14 and .NET 10 simplify the use of 'Span<T>' and 'ReadOnlySpan<T>' by reducing ceremonial code in method invocations.\n2. Refactor the invocations by removing explicit '.AsSpan()' calls.",
+      "Criteria": [
+        {
+          "Description": "Explains that C# 14 introduces implicit conversions from arrays, strings, and stackalloc to Span<T> and ReadOnlySpan<T>, reducing syntactic ceremony and facilitating high-performance overloads",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the client code by passing 'rawBytes' and 'text' directly to methods without invoking '.AsSpan()'",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Natural Numeric Ordering with CompareOptions.NumericOrdering",
+      "Category": ".NET 10 & C# 14",
+      "Prompt": "Analyze the following scenario where a list of filenames contains numbers: '[\"Document1.txt\", \"Document10.txt\", \"Document2.txt\"]'. It needs to be sorted in natural/human order so that 'Document2.txt' appears before 'Document10.txt'.\n\nMANDATORY REQUIREMENTS:\n1. Explain the new native option incorporated into .NET 10 string comparison and sorting APIs (System.Globalization) that eliminates the need for regular expressions or Windows native APIs (StrCmpLogicalW).\n2. Refactor the string list sorting using 'CompareOptions.NumericOrdering' with StringComparer or string.Compare.",
+      "Criteria": [
+        {
+          "Description": "Identifies the addition of the 'CompareOptions.NumericOrdering' enum value in System.Globalization in .NET 10 for natural numeric string sorting",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors LINQ sorting using StringComparer.Create (with CultureInfo.CurrentCulture, CultureInfo.InvariantCulture, or equivalent CultureInfo) and CompareOptions.NumericOrdering, or equivalent string.Compare implementation",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Null-Conditional Assignment",
+      "Category": ".NET 10 & C# 14",
+      "Prompt": "Analyze the following defensive C# code block:\n\npublic void UpdateCustomerOrder(Customer? customer, decimal discount) {\n    if (customer != null && customer.CurrentOrder != null) {\n        customer.CurrentOrder.Status = \"Updated\";\n        customer.CurrentOrder.TotalAmount -= discount;\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the syntactic improvement in C# 14 (.NET 10) regarding null-conditional operators on the left-hand side of assignments.\n2. Refactor the method by eliminating the defensive 'if' blocks and applying direct null-conditional assignment (including compound operators like '-=').",
+      "Criteria": [
+        {
+          "Description": "Explains that C# 14 allows using the null-conditional operator '?.' on the left-hand side of an assignment or compound assignment, evaluating the right-hand side only if the receiver is not null",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code by removing the 'if' structure and applying 'customer?.CurrentOrder?.Status = \"Updated\"' along with direct compound assignments",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: 'allows ref struct' Anti-Constraint in Generics",
+      "Category": ".NET 10 & C# 14 - Data Types & Keywords",
+      "Prompt": "In traditional C#, 'ref struct' types like 'Span<T>' and 'ReadOnlySpan<T>' could not be used as type arguments in generic methods (e.g., 'ProcessData<T>(T data)').\n\nMANDATORY REQUIREMENTS:\n1. Explain how the new language anti-constraint 'where T : allows ref struct' enables using 'ref struct' types in generics without violating stack-only memory safety rules.\n2. Write a generic method 'public void Process<T>(T input) where T : allows ref struct' and demonstrate invoking it with a 'ReadOnlySpan<char>'.",
+      "Criteria": [
+        {
+          "Description": "Explains the role of the 'allows ref struct' anti-constraint in allowing ref struct types as generic type parameters without risking promotion to the Managed Heap",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors/writes the generic method using the 'where T : allows ref struct' clause and invokes it correctly with a Span<T> or ReadOnlySpan<T>",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Generic OrderedDictionary<TKey, TValue> Collection",
+      "Category": ".NET 10 & C# 14 - Data Types & Keywords",
+      "Prompt": "In earlier .NET versions, developers had to choose between Dictionary<TKey, TValue> (fast O(1) key lookups but no insertion order) and List<KeyValuePair<TKey, TValue>> (preserves order, but slow O(N) lookups), or rely on the legacy non-generic System.Collections.Specialized.OrderedDictionary.\n\nMANDATORY REQUIREMENTS:\n1. Explain the native generic 'System.Collections.Generic.OrderedDictionary<TKey, TValue>' introduced in .NET 9/10, explaining its O(1) key lookups, deterministic insertion order preservation, and indexed access.\n2. Write a concise code example directly instantiating and consuming the built-in 'OrderedDictionary<string, int>' (demonstrating addition, access by key, and positional access by index). Do NOT implement a custom collection class from scratch.",
+      "Criteria": [
+        {
+          "Description": "Explains that .NET natively provides generic System.Collections.Generic.OrderedDictionary<TKey, TValue>, highlighting O(1) lookups, insertion-order preservation, and indexed access without requiring custom wrappers",
+          "Weight": 50
+        },
+        {
+          "Description": "Demonstrates instantiation and usage of built-in OrderedDictionary<TKey, TValue> showing both key-based lookup and positional index access without writing a custom dictionary class",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Native Tensor<T> Data Type for Artificial Intelligence",
+      "Category": ".NET 10 & C# 14 - Data Types & Keywords",
+      "Prompt": "In modern .NET versions focused on Machine Learning and Artificial Intelligence workload acceleration, the 'Tensor<T>' data type was introduced within the 'System.Numerics.Tensors' namespace.\n\nMANDATORY REQUIREMENTS:\n1. Explain the purpose of the 'Tensor<T>' data type, detailing its differences from a traditional multidimensional array ('float[,]') regarding contiguous memory layout, SIMD acceleration, and ONNX/Torch interop.\n2. Write a C# code snippet that creates and initializes a dense multidimensional 'Tensor<float>' using the 'System.Numerics.Tensors' APIs.",
+      "Criteria": [
+        {
+          "Description": "Explains that Tensor<T> is a contiguous n-dimensional primitive type optimized for SIMD vector operations and high-performance interop with AI libraries",
+          "Weight": 50
+        },
+        {
+          "Description": "Writes a C# code example using 'Tensor.Create<float>' or direct 'Tensor<float>' instantiation, defining dimensions and data manipulation",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: System.Threading.Lock Synchronization Type",
+      "Category": ".NET 10 & C# 14 - Data Types & Keywords",
+      "Prompt": "Historically in .NET, thread synchronization was performed using 'lock(new object())', which relies on System.Threading.Monitor and the object header sync block index.\n\nMANDATORY REQUIREMENTS:\n1. Explain the native 'System.Threading.Lock' type introduced in .NET 9/10, detailing how it replaces object-based Monitor locks, avoids sync block table overhead, and improves throughput.\n2. Provide a refactored thread-safe class using 'private readonly Lock _lock = new();' demonstrating synchronization. Note that either modern C# 'lock (_lock)' syntax or 'using (_lock.EnterScope())' is fully valid.",
+      "Criteria": [
+        {
+          "Description": "Explains that System.Threading.Lock provides a lightweight, dedicated synchronization primitive in .NET 9/10 that replaces legacy object/Monitor locking and reduces overhead",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the synchronization code to declare a System.Threading.Lock instance and uses either the modern 'lock (_lock)' statement or 'using (_lock.EnterScope())' for thread safety",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Pattern Matching: 'or' Expressions in Property Patterns",
+      "Category": "Pattern Matching Advanced",
+      "Prompt": "Analyze this code with multiple 'if' statements:\n\nif (user.Role == \"Admin\" || user.Role == \"SuperAdmin\") {\n    if (user.IsActive && user.EmailVerified) {\n        GrantAccess(user);\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Refactor using 'property pattern' with the 'or' combinator in C# 14.\n2. Apply 'if (user is { Role: \"Admin\" or \"SuperAdmin\", IsActive: true, EmailVerified: true })'.",
+      "Criteria": [
+        {
+          "Description": "Uses property pattern with multiple conditions in a single expression",
+          "Weight": 50
+        },
+        {
+          "Description": "Applies 'or' combinator correctly in the Role pattern",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Pattern Matching: List Patterns with Discard",
+      "Category": "Pattern Matching Advanced",
+      "Prompt": "Analyze this manual list validation:\n\nif (args.Length >= 3 && args[0] == \"cmd\" && args[2].StartsWith(\"--\")) {\n    ProcessCommand(args);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain 'List Patterns' in C# 14 (.NET 10) with slice pattern [..].\n2. Refactor using 'if (args is [\"cmd\", _, var flag, ..] && flag.StartsWith(\"--\"))'.",
+      "Criteria": [
+        {
+          "Description": "Explains List Patterns with _ (discard), var (capture), and .. (slice)",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors using pattern matching with [, _, var, ..] correctly",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Trap: Hallucinated Source Generator APIs (AutoNotify / [GenerateSerializer])",
+      "Category": "Adversarial - Source Generators",
+      "Prompt": "A developer claims that .NET includes the following built-in Source Generators out of the box for any C# project without extra packages:\n- '[AutoNotify]' — automatically generates 'INotifyPropertyChanged' for properties.\n- '[GenerateSerializer]' — generates a high-performance binary serializer for any POCO class.\n- '[Reactive]' — converts properties into ReactiveUI Observables.\n\nMANDATORY REQUIREMENTS:\n1. Evaluate each claim, explicitly stating which of these attributes/Source Generators exist natively in the .NET SDK without external NuGet packages.\n2. For each one that does NOT exist natively, identify which real package or SDK provides it (e.g., System.Text.Json, Orleans, ReactiveUI, Community Toolkit) or if it is pure hallucination.",
+      "Criteria": [
+        {
+          "Description": "Correctly identifies that '[AutoNotify]' does NOT exist in the .NET SDK: it is a documentation sample (Microsoft Docs) and the real implementation is provided by CommunityToolkit.Mvvm via [ObservableProperty]",
+          "Weight": 35
+        },
+        {
+          "Description": "Identifies that '[GenerateSerializer]' exists BUT only in Microsoft.Orleans (Orleans Serialization), not in the base .NET SDK or System.Text.Json",
+          "Weight": 35
+        },
+        {
+          "Description": "Identifies that '[Reactive]' is part of the ReactiveUI.Fody package (an IL weaver, not a native .NET Source Generator) and is not in the .NET SDK",
+          "Weight": 30
+        }
+      ]
+    },
+    {
+      "Name": ".NET Framework to Modern .NET Migration",
+      "Category": "Migration",
+      "Prompt": "Analyze this legacy .NET Framework 4.8 code running inside a Web API controller:\npublic class UserReportController : ApiController {\n    public HttpResponseMessage GetUserData(string userId) {\n        var client = new HttpWebRequest();\n        var result = FetchDataFromExternalApiAsync(userId).Result;\n        return Request.CreateResponse(HttpStatusCode.OK, result);\n    }\n    private async Task<string> FetchDataFromExternalApiAsync(string id) {\n        using (var client = new HttpClient()) {\n            var response = await client.GetAsync(\"https://api.internal/users/\" + id);\n            return await response.Content.ReadAsStringAsync();\n        }\n    }\n}\nHighlight the 2 critical architectural dangers when migrating this code to .NET 8/10 (SynchronizationContext deadlocks and HttpClient socket exhaustion) and show the refactored modern version using clean async/await and IHttpClientFactory.",
+      "Criteria": [
+        {
+          "Description": "Identifies the Deadlock risk caused by synchronous blocking (.Result) and recommends async/await end-to-end",
+          "Weight": 50
+        },
+        {
+          "Description": "Identifies Socket Exhaustion caused by creating 'new HttpClient()' per request and proposes IHttpClientFactory",
+          "Weight": 50
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,188 @@
+{
+  "Name": "SQL Server, T-SQL, Dapper & EF Core Data Architecture Suite",
+  "DefaultSystemPrompt": "You are a Principal Database Architect and SQL Server DBA expert in T-SQL optimization, query execution plan internals, index design (Sargability), Dapper high-throughput data access, and EF Core 8/9/10 compiled execution.\n1. Provide rigorous, production-ready, fully compiling C# and T-SQL code solutions.\n2. Be precise with query optimizer heuristics, locking table hints (UPDLOCK, HOLDLOCK), plan cache pollution, and parameter data types (VARCHAR vs NVARCHAR).\n3. Keep explanations technical, architectural, and concise.",
+  "DefaultUserPromptSuffix": "MANDATORY OUTPUT CONSTRAINTS:\n1. Wrap code in standard markdown code blocks (```sql ... ``` or ```csharp ... ```).\n2. Address concurrency, locking, memory allocations, and execution plan reuse explicitly.\n3. Keep technical explanations direct and free of conversational filler.",
+  "DefaultJudgeSystemPrompt": "You are a strict, highly accurate technical evaluation judge for SQL Server (T-SQL), Dapper, and Entity Framework Core.\n\nCRITICAL EVALUATION GUIDELINES (AVOID FALSE NEGATIVES):\n1. T-SQL & Index Optimization:\n   - Verify Sargable date range predicates (avoiding scalar functions like YEAR/MONTH on indexed columns).\n   - In concurrent UPSERT/UPDATE operations, verify the use of WITH (HOLDLOCK, UPDLOCK) or SERIALIZABLE isolation to prevent race conditions.\n   - Acknowledge window functions (RANK() OVER) as the correct O(N log N) replacement for correlated subqueries.\n2. Dapper & ADO.NET Performance:\n   - Verify parameterization using 'DbString { IsAnsi = true }' when querying VARCHAR columns to prevent implicit conversion and force Index Seeks.\n   - Verify 'buffered: false' for streaming large datasets and 'QueryMultipleAsync' for single round-trip relational queries.\n3. EF Core Native Compilation:\n   - Confirm the use of native LINQ 'ExecuteUpdateAsync' / 'ExecuteDeleteAsync' and 'EF.CompileAsyncQuery'.\n4. Output Formatting:\n   - Output your decision on the very first line as:\n   VERDICT: PASS\n   or\n   VERDICT: FAIL\n\n   Followed by a brief one-sentence reason.",
+  "Tests": [
+    {
+      "Name": "Trap: NOLOCK on UPDATE Statements",
+      "Category": "Adversarial - T-SQL",
+      "Prompt": "Analyze the following T-SQL query in a high-concurrency environment:\n\nUPDATE Inventory WITH (NOLOCK)\nSET Stock = Stock - 1\nWHERE ProductId = @Id AND Stock > 0;\n\nMANDATORY REQUIREMENTS:\n1. Explain the trap of using WITH (NOLOCK) in UPDATE statements, clarifying explicitly whether NOLOCK prevents the database engine from acquiring Exclusive locks (X locks) during data modification.\n2. Correct the T-SQL query by explicitly using 'WITH (UPDLOCK, HOLDLOCK)' or a SERIALIZABLE isolation level.",
+      "Criteria": [
+        {
+          "Description": "Explains that WITH (NOLOCK) only applies to the read/SELECT phase and that SQL Server always acquires Exclusive locks (X locks) to execute the UPDATE modification",
+          "Weight": 50
+        },
+        {
+          "Description": "Corrects the T-SQL script explicitly using 'WITH (UPDLOCK, HOLDLOCK)' or SERIALIZABLE isolation level",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Trap: Hallucinated EF Core API (BulkDeleteWithCascade)",
+      "Category": "Adversarial - EF Core",
+      "Prompt": "A consultant suggests using 'dbContext.AuditLogs.Where(x => x.Created < limitDate).BulkDeleteWithCascadeAsync();' to delete 100,000 old records without tracking.\n\nMANDATORY REQUIREMENTS:\n1. Explicitly confirm whether 'BulkDeleteWithCascadeAsync' exists or not in Microsoft's official EF Core SDK.\n2. Provide the official and native Microsoft solution for bulk database deletes using native LINQ 'ExecuteDeleteAsync()' syntax in EF Core 7+.",
+      "Criteria": [
+        {
+          "Description": "Explicitly identifies that 'BulkDeleteWithCascadeAsync' does NOT exist in Microsoft's official EF Core SDK",
+          "Weight": 50
+        },
+        {
+          "Description": "Provides refactored code explicitly using the native 'ExecuteDeleteAsync()' or 'ExecuteDelete()' method",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Concurrent UPSERT in SQL Server",
+      "Category": "T-SQL",
+      "Prompt": "Write a T-SQL query for SQL Server that performs an UPSERT on the 'Inventory (ProductId PK, Stock)' table exposed to hundreds of concurrent requests.\nMANDATORY REQUIREMENT: Use MERGE syntax and explicitly include the WITH (HOLDLOCK) table hint or SERIALIZABLE transaction to prevent race conditions and primary key deadlocks under high concurrency.",
+      "Criteria": [
+        {
+          "Description": "Uses the T-SQL MERGE statement",
+          "Weight": 40
+        },
+        {
+          "Description": "Explicitly includes the mandatory WITH (HOLDLOCK) hint or SERIALIZABLE isolation level",
+          "Weight": 60
+        }
+      ]
+    },
+    {
+      "Name": "T-SQL: Non-Sargable Predicates and Index Scanning",
+      "Category": "T-SQL Performance",
+      "Prompt": "Analyze the following T-SQL query executed against an 'Orders' table with a non-clustered index on 'OrderDate':\n\nSELECT OrderId, CustomerId, TotalAmount\nFROM Orders\nWHERE YEAR(OrderDate) = 2026 AND MONTH(OrderDate) = 8;\n\nMANDATORY REQUIREMENTS:\n1. Explain why applying scalar functions (YEAR, MONTH, UPPER, etc.) on indexed columns in the WHERE clause makes the query Non-Sargable, forcing a full Index Scan instead of a targeted Index Seek.\n2. Rewrite the T-SQL query in Sargable format using an explicit date range ('WHERE OrderDate >= ... AND OrderDate < ...') allowing the query optimizer to perform an Index Seek.",
+      "Criteria": [
+        {
+          "Description": "Explains that applying scalar functions to columns in the WHERE clause disables the optimizer's ability to perform an Index Seek (Non-Sargable)",
+          "Weight": 50
+        },
+        {
+          "Description": "Rewrites the T-SQL query using explicit date ranges (OrderDate >= '2026-08-01' AND OrderDate < '2026-09-01'), enabling Index Seek",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "T-SQL: Window Functions vs Correlated Subqueries",
+      "Category": "T-SQL Performance",
+      "Prompt": "Analyze the following T-SQL query calculating regional sales rankings using correlated subqueries:\n\nSELECT\n    s.SalespersonId,\n    s.Region,\n    s.TotalSales,\n    (SELECT COUNT(*) + 1 FROM Sales s2\n     WHERE s2.Region = s.Region AND s2.TotalSales > s.TotalSales) AS Rank\nFROM Sales s;\n\nMANDATORY REQUIREMENTS:\n1. Explain why the correlated subquery executes N table scans (one per outer row) with O(N²) complexity, exponentially degrading performance as data volume grows.\n2. Rewrite the query using the window function 'RANK() OVER (PARTITION BY Region ORDER BY TotalSales DESC)' to compute the ranking in a single scan with O(N log N) complexity.",
+      "Criteria": [
+        {
+          "Description": "Explains that the correlated subquery executes a scan for each row of the outer table, resulting in O(N²) complexity",
+          "Weight": 50
+        },
+        {
+          "Description": "Rewrites the query using RANK() OVER (PARTITION BY ... ORDER BY ...) to compute rankings in a single table scan",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Dapper: Implicit Type Conversion (VARCHAR vs DbString)",
+      "Category": "Dapper Performance",
+      "Prompt": "Analyze the following Dapper query in C# targeting a SQL Server table where 'ProductCode' is defined as 'VARCHAR(50)' with a non-clustered index:\n\npublic async Task<Product> GetProductAsync(IDbConnection db, string code) {\n    return await db.QueryFirstOrDefaultAsync<Product>(\n        \"SELECT Id, ProductCode, Name FROM Products WHERE ProductCode = @code\",\n        new { code }\n    );\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why Dapper maps C# 'string' types by default to 'NVARCHAR' (Unicode), forcing SQL Server to perform an implicit conversion (CONVERT_IMPLICIT) on the VARCHAR column, negating Index Seek capability.\n2. Refactor the parameter in Dapper using 'DbString' with 'IsAnsi = true' (or 'AnsiString') to explicitly force VARCHAR and preserve index performance.",
+      "Criteria": [
+        {
+          "Description": "Explains that Dapper sends strings as NVARCHAR by default and that implicit conversion from VARCHAR to NVARCHAR in SQL Server invalidates Index Seek usage",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the parameter using 'new DbString { Value = code, IsAnsi = true }' to explicitly send a VARCHAR type to SQL Server",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Dapper: Memory Buffering vs Unbuffered Streaming (buffered: false)",
+      "Category": "Dapper Performance",
+      "Prompt": "Analyze this C# Dapper method processing a massive log export report:\n\npublic async Task<List<LogEntry>> ExportLogsAsync(IDbConnection db, DateTime startDate) {\n    var logs = await db.QueryAsync<LogEntry>(\"SELECT Id, Timestamp, Message, StackTrace FROM SystemLogs WHERE Timestamp >= @startDate\", new { startDate });\n    return logs.ToList();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why the default 'buffered: true' parameter in Dapper loads the entire result set into RAM before returning, risking an OutOfMemoryException on large tables.\n2. Refactor the query passing 'buffered: false' to stream rows row-by-row through an 'IEnumerable' without buffering the entire dataset in memory.",
+      "Criteria": [
+        {
+          "Description": "Explains that 'buffered: true' (default) fetches the entire DataReader into RAM before returning, creating an OutOfMemoryException risk",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the call passing 'buffered: false' to process the data stream line-by-line",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Dapper: N+1 Problem and QueryMultiple Usage",
+      "Category": "Dapper Performance",
+      "Prompt": "Analyze the following C# service code using Dapper to fetch orders and items:\n\npublic async Task<List<OrderDto>> GetCustomerOrdersAsync(IDbConnection db, int customerId) {\n    var orders = (await db.QueryAsync<OrderDto>(\"SELECT Id, OrderDate, Total FROM Orders WHERE CustomerId = @customerId\", new { customerId })).ToList();\n    \n    foreach (var order in orders) {\n        order.Items = (await db.QueryAsync<OrderItem>(\"SELECT Id, ProductName, Price FROM OrderItems WHERE OrderId = @id\", new { id = order.Id })).ToList();\n    }\n    return orders;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the catastrophic impact on network latency and database I/O overhead caused by the N+1 query pattern in Dapper.\n2. Refactor the method to execute a SINGLE database call using 'db.QueryMultipleAsync()', sequentially reading both result sets with 'multi.ReadAsync<OrderDto>()' and 'multi.ReadAsync<OrderItem>()' in one clean round-trip.",
+      "Criteria": [
+        {
+          "Description": "Explains that N+1 queries trigger multiple network round-trips and saturate database connection pools",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the query to a single round-trip strictly using db.QueryMultipleAsync() and reading sets sequentially with ReadAsync",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Dapper: String Interpolation and Plan Cache Pollution",
+      "Category": "Dapper Performance",
+      "Prompt": "Analyze the following code in a C# microservice using Dapper:\n\npublic async Task<IEnumerable<Customer>> GetCustomersByCityAsync(IDbConnection db, string city) {\n    string sql = $\"SELECT Id, Name, City FROM Customers WHERE City = '{city}'\";\n    return await db.QueryAsync<Customer>(sql);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the two critical issues caused by direct interpolation in Dapper: SQL Injection vulnerability and Query Plan Cache Pollution in SQL Server.\n2. Refactor the query using Dapper anonymous parameterization ('SELECT ... WHERE City = @City', new { City = city }) to guarantee security and execution plan reuse.",
+      "Criteria": [
+        {
+          "Description": "Explains that direct interpolation exposes SQL Injection and prevents execution plan reuse, generating Plan Cache Pollution in SQL Server",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the query using Dapper's anonymous parameter object (@City, new { City = city })",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "EF Core: Compiled Queries for Hot Paths",
+      "Category": "EF Core",
+      "Prompt": "Analyze the following ASP.NET Core endpoint invoked 10,000 times per second:\n\npublic async Task<User?> GetUserByIdAsync(AppDbContext db, int userId) {\n    return await db.Users\n        .AsNoTracking()\n        .FirstOrDefaultAsync(u => u.Id == userId);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the cost of repeated LINQ compilation: on each invocation EF Core translates the expression tree to SQL, validates the model, and generates execution plans from scratch.\n2. Refactor the code using 'EF.CompileAsyncQuery' to pre-compile the query once during application startup as a static field, eliminating translation overhead on hot paths.",
+      "Criteria": [
+        {
+          "Description": "Explains that EF Core recompiles the LINQ expression to SQL on each invocation (expression tree translation, model validation), incurring repetitive overhead on hot paths",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code by declaring a static field with EF.CompileAsyncQuery and using it in the query method",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "EF Core: Misuse of .ToList() and Premature LINQ Materialization",
+      "Category": "EF Core",
+      "Prompt": "Analyze this LINQ query against a database with 2,000,000 records:\n\npublic async Task<List<ProductDto>> GetActiveExpensiveProductsAsync(AppDbContext context) {\n    var allProducts = context.Products.ToList();\n    \n    var filtered = allProducts\n        .Where(p => p.IsActive && p.Price > 1000)\n        .Select(p => new ProductDto { Id = p.Id, Name = p.Name })\n        .Take(10)\n        .ToList();\n        \n    return filtered;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the performance disaster caused by invoking '.ToList()' prematurely: downloading 2 million complete rows from the database into C# RAM and performing filtering client-side instead of in SQL Server.\n2. Refactor the query maintaining the 'IQueryable' chain so that the SQL translation executes WHERE, SELECT, and TOP(10) directly in the database, postponing asynchronous materialization to the end with 'await ...ToListAsync()'.",
+      "Criteria": [
+        {
+          "Description": "Explains that calling .ToList() prematurely downloads the full table into RAM, executing filtering client-side instead of delegating to SQL Server",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the query maintaining the IQueryable chain to postpone async materialization with await .ToListAsync() at the end",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Native Bulk Update in EF Core 8/9/10",
+      "Category": "EF Core",
+      "Prompt": "I need to increase product prices by 10% where CategoryId = 5 across a table with 500k rows.\nWrite optimized C# Entity Framework Core 8/9/10 code executed directly in the database without loading entities into the application server's memory.\nMANDATORY REQUIREMENT: Use the native LINQ API 'ExecuteUpdateAsync' (or 'ExecuteUpdate'). Do NOT use raw SQL (ExecuteSqlRaw) or SaveChanges.",
+      "Criteria": [
+        {
+          "Description": "Uses ExecuteUpdateAsync or ExecuteUpdate with native LINQ syntax",
+          "Weight": 70
+        },
+        {
+          "Description": "Avoids SaveChanges/ToListAsync, raw SQL, or in-memory entity iteration",
+          "Weight": 30
+        }
+      ]
+    }
+  ]
+}

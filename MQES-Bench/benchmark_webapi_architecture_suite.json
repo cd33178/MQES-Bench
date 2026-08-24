@@ -1,0 +1,248 @@
+{
+  "Name": "ASP.NET Core Web API, Microservices & Architecture Suite",
+  "DefaultSystemPrompt": "You are a Principal Enterprise Solutions Architect expert in ASP.NET Core (.NET 8/10), Minimal APIs, Dependency Injection lifecycles, Clean Architecture, gRPC, SignalR, and distributed caching (HybridCache).\n1. Provide production-ready, clean, scalable C# architectures.\n2. Explicitly address Captive Dependencies, middleware pipeline short-circuiting, endpoint validation filters, rate limiting, and exception handlers.",
+  "DefaultUserPromptSuffix": "MANDATORY OUTPUT CONSTRAINTS:\n1. Wrap code in ```csharp ... ``` blocks.\n2. Ensure all middleware orderings, DI service registrations, and route configurations follow official ASP.NET Core standards.",
+  "DefaultJudgeSystemPrompt": "You are a strict technical evaluation judge for ASP.NET Core and Clean Architecture.\n\nCRITICAL EVALUATION GUIDELINES:\n1. Architecture & DI:\n   - Verify identification of Captive Dependencies (Singleton capturing Scoped services like DbContext).\n   - Acknowledge 'HybridCache' for stampede-protected L1/L2 multi-tier caching.\n2. Middleware & Pipeline:\n   - Verify pipeline ordering: UseStaticFiles must precede UseRouting for short-circuiting.\n   - Ensure endpoint validation occurs BEFORE calling 'await next(context)'.\n3. Modern BCL APIs (.NET 8/10):\n   - Verify 'IExceptionHandler', 'TimeProvider', and native 'AddRateLimiter'.\n4. Output Formatting:\n   - Output your decision on the very first line as:\n   VERDICT: PASS\n   or\n   VERDICT: FAIL\n\n   Followed by a brief one-sentence reason.",
+  "Tests": [
+    {
+      "Name": "Architecture: Captive Dependencies (Singleton injecting Scoped)",
+      "Category": "Architecture & DI",
+      "Prompt": "Analyze the following Dependency Injection (DI) configuration in ASP.NET Core:\n\npublic class OrderProcessingService {\n    private readonly AppDbContext _dbContext;\n    public OrderProcessingService(AppDbContext dbContext) => _dbContext = dbContext;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the danger of 'Captive Dependencies' when a Singleton service captures a Scoped service (such as DbContext), leading to Memory Leaks, non-thread-safe DbContext operations, and stale data.\n2. Show both valid refactorings: changing 'OrderProcessingService' to Scoped or injecting 'IServiceScopeFactory' / 'IDbContextFactory<AppDbContext>' to create temporary scopes.",
+      "Criteria": [
+        {
+          "Description": "Explains the concept of Captive Dependency and the concurrency/threading and lifetime mismatch risks of injecting a Scoped service into a Singleton",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code by changing service lifetime to Scoped or injecting IServiceScopeFactory / IDbContextFactory to create safe scopes",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Architecture: HybridCache (.NET 9) vs IMemoryCache + IDistributedCache",
+      "Category": "Architecture & DI",
+      "Prompt": "An ASP.NET Core system uses two manual caching layers:\n\npublic async Task<ProductDto?> GetProductAsync(int id) {\n    var key = $\"product:{id}\";\n    if (_memCache.TryGetValue(key, out ProductDto? cached)) return cached;\n    \n    var bytes = await _distCache.GetAsync(key);\n    if (bytes != null) {\n        cached = Deserialize<ProductDto>(bytes);\n        _memCache.Set(key, cached, TimeSpan.FromMinutes(5));\n        return cached;\n    }\n    \n    cached = await _db.Products.FindAsync(id);\n    await _distCache.SetAsync(key, Serialize(cached), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30) });\n    _memCache.Set(key, cached, TimeSpan.FromMinutes(5));\n    return cached;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the limitations of the manual pattern (cache stampede / thundering herd, manual serialization, double invalidation) that HybridCache resolves.\n2. Refactor the method using the 'Microsoft.Extensions.Caching.Hybrid.HybridCache' API (GetOrCreateAsync) with LocalExpiration and DistributedExpiration options.",
+      "Criteria": [
+        {
+          "Description": "Explains the cache stampede (thundering herd) problem and manual serialization complexity resolved by HybridCache via native stampede locking",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using HybridCache.GetOrCreateAsync with HybridCacheEntryOptions specifying LocalExpiration and DistributedExpiration",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Filters: IAsyncActionFilter with Response Caching",
+      "Category": "ASP.NET Core Filters & Middleware",
+      "Prompt": "Create an 'IAsyncActionFilter' in ASP.NET Core that implements HTTP response caching based on the '[ResponseCache(Duration = 60)]' attribute.\n\nMANDATORY REQUIREMENTS:\n1. Implement 'OnActionExecutionAsync' checking if the response exists in IMemoryCache.\n2. If cached, short-circuit execution with 'context.Result = new ObjectResult(cachedData)'.",
+      "Criteria": [
+        {
+          "Description": "Correctly implements IAsyncActionFilter with cache-lookup logic in OnActionExecutionAsync",
+          "Weight": 50
+        },
+        {
+          "Description": "Short-circuits execution without invoking 'await next()' when data is cached",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Middleware: Execution Order and Short-Circuiting",
+      "Category": "ASP.NET Core Filters & Middleware",
+      "Prompt": "Analyze this ASP.NET Core pipeline:\n\napp.UseAuthentication();\napp.UseAuthorization();\napp.UseStaticFiles();\napp.UseRouting();\napp.UseEndpoints(...);\n\nMANDATORY REQUIREMENTS:\n1. Identify the fatal error in middleware ordering (UseStaticFiles after UseRouting).\n2. Explain the concept of 'short-circuiting' in middleware and correct the order.",
+      "Criteria": [
+        {
+          "Description": "Identifies that UseStaticFiles must be placed BEFORE UseRouting to short-circuit static file requests",
+          "Weight": 50
+        },
+        {
+          "Description": "Shows the correct order: UseStaticFiles → UseRouting → UseAuthentication → UseAuthorization → UseEndpoints",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Minimal API: MapGroup with Endpoint Validation",
+      "Category": "Minimal APIs & Source Generators",
+      "Prompt": "Analyze this API defining multiple CRUD routes for 'products':\n\nvar app = WebApplication.Create(args);\n\napp.MapGet(\"/api/products\", () => GetProducts());\napp.MapGet(\"/api/products/{id}\", (int id) => GetProductById(id));\napp.MapPost(\"/api/products\", (Product p) => CreateProduct(p));\napp.MapPut(\"/api/products/{id}\", (int id, Product p) => UpdateProduct(id, p));\napp.MapDelete(\"/api/products/{id}\", (int id) => DeleteProduct(id));\n\nMANDATORY REQUIREMENTS:\n1. Explain how 'MapGroup' in .NET 10 Minimal APIs reduces prefix duplication and improves route organization.\n2. Refactor using 'var products = app.MapGroup(\"/api/products\")' with FluentValidation or DataAnnotations validation.",
+      "Criteria": [
+        {
+          "Description": "Explains that MapGroup reduces prefix duplication and enables centralized middleware and validation filters",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors using MapGroup and applies .AddEndpointFilter<ValidationFilter>() or equivalent",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Source Generators: Generated Partial Logging Method",
+      "Category": "Minimal APIs & Source Generators",
+      "Prompt": "Analyze this repetitive logging method:\n\npublic void ProcessOrder(Order order) {\n    _logger.LogInformation($\"Processing order {order.Id} for {order.CustomerName} with amount {order.Amount:C}\");\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the '[LoggerMessage]' Source Generator in .NET 10 that eliminates boxing and string interpolation.\n2. Refactor using the generated 'partial' method pattern with '[LoggerMessage(Level = LogLevel.Information, Message = \"...\")]'.",
+      "Criteria": [
+        {
+          "Description": "Explains that [LoggerMessage] generates optimized compile-time code, eliminating string allocations and boxing",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors declaring a partial method with [LoggerMessage] correctly",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Validation Interceptor in Minimal APIs",
+      "Category": "Web API",
+      "Prompt": "Analyze the following validation filter in a Minimal API:\n\napp.MapPost(\"/orders\", async (OrderDto dto) => TypedResults.Ok(dto))\n   .AddEndpointFilter(async (context, next) => {\n       var dto = context.GetArgument<OrderDto>(0);\n       var result = await next(context);\n       if (dto.Amount <= 0) return TypedResults.BadRequest(\"Invalid amount\");\n       return result;\n   });\n\nMANDATORY REQUIREMENTS:\n1. Explain why calling 'await next(context)' BEFORE validating the DTO is a critical flaw in filter execution flow.\n2. Refactor the filter to perform validation BEFORE calling 'await next(context)', returning 'TypedResults.BadRequest' if Amount is <= 0.",
+      "Criteria": [
+        {
+          "Description": "Explains that calling 'await next(context)' first executes the endpoint handler before validating data, wasting server resources",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the filter validating arguments BEFORE calling await next(context), returning TypedResults.BadRequest or ValidationProblem if invalid",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Web API: Exception Handling with IExceptionHandler",
+      "Category": "Web API",
+      "Prompt": "In ASP.NET Core (.NET 8/10), refactor global exception handling by creating a custom Handler implementing 'IExceptionHandler'.\nMANDATORY REQUIREMENTS:\n1. In the Handler class, inject 'IProblemDetailsService' via constructor and invoke 'TryWriteAsync' inside 'TryHandleAsync'.\n2. In Program.cs, show the clean official setup:\n   - 'builder.Services.AddExceptionHandler<CustomExceptionHandler>();'\n   - 'builder.Services.AddProblemDetails();'\n   - 'app.UseExceptionHandler();'.",
+      "Criteria": [
+        {
+          "Description": "Injects 'IProblemDetailsService' via constructor and invokes TryWriteAsync/WriteAsync inside TryHandleAsync",
+          "Weight": 50
+        },
+        {
+          "Description": "Shows Program.cs configuration with AddExceptionHandler, AddProblemDetails, and clean activation with 'app.UseExceptionHandler()'",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Web API: Native Rate Limiting with RateLimiter (.NET 7+)",
+      "Category": "Web API",
+      "Prompt": "A team protects their Minimal API endpoints using third-party rate limiting middleware. They need to migrate to the native .NET 7+ system.\n\nMANDATORY REQUIREMENTS:\n1. Show Program.cs configuration using 'builder.Services.AddRateLimiter' with a Fixed Window policy: max 100 requests per 10 seconds, rejecting with HTTP 429.\n2. Apply the policy to the API route group with '.RequireRateLimiting(\"fixed\")' and configure rejection via 'options.OnRejected' returning StatusCodes.Status429TooManyRequests.",
+      "Criteria": [
+        {
+          "Description": "Correctly configures AddRateLimiter with AddFixedWindowLimiter specifying PermitLimit, Window, and QueueProcessingOrder in Program.cs",
+          "Weight": 50
+        },
+        {
+          "Description": "Applies the policy to endpoint/group with RequireRateLimiting and configures OnRejected to return HTTP 429",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Security: HSTS with Preload in Production",
+      "Category": "Security & Identity",
+      "Prompt": "Analyze this HSTS configuration:\n\napp.UseHsts();\n\nMANDATORY REQUIREMENTS:\n1. Explain what HSTS Preload is and its requirements (max-age >= 31536000, includeSubDomains).\n2. Configure 'builder.Services.AddHsts(options => ...)' for Preload in production.",
+      "Criteria": [
+        {
+          "Description": "Explains HSTS Preload and requirements (1-year max-age, includeSubDomains, preload directive)",
+          "Weight": 50
+        },
+        {
+          "Description": "Configures options.MaxAge, options.IncludeSubDomains, and options.Preload correctly",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "gRPC: Server Streaming vs Unary RPC for Bulk Data Export",
+      "Category": "gRPC",
+      "Prompt": "A gRPC service returns a report containing 500,000 transaction rows using a Unary RPC:\n\nservice ReportService {\n    rpc GetTransactions(ReportRequest) returns (TransactionListResponse);\n}\n\nThe C# service implements:\npublic override async Task<TransactionListResponse> GetTransactions(\n    ReportRequest request, ServerCallContext context) {\n    var all = await _db.Transactions.ToListAsync();\n    return new TransactionListResponse { Transactions = { all.Select(Map) } };\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why using Unary RPC for massive datasets buffers the entire response in memory before sending the first byte to the client, spiking latency and RAM consumption.\n2. Refactor the .proto contract to 'server_streaming' RPC and the C# server implementation using 'IServerStreamWriter<Transaction>' with 'await responseStream.WriteAsync()' inside an 'await foreach'.",
+      "Criteria": [
+        {
+          "Description": "Explains that Unary RPC materializes the complete response in memory before transmitting, making it unsuitable for massive datasets",
+          "Weight": 40
+        },
+        {
+          "Description": "Refactors the .proto to 'rpc GetTransactions(ReportRequest) returns (stream Transaction)' and implements IServerStreamWriter with WriteAsync streaming",
+          "Weight": 60
+        }
+      ]
+    },
+    {
+      "Name": "gRPC-JSON: REST to gRPC Transcoding",
+      "Category": "HTTP/3 & gRPC-JSON",
+      "Prompt": "Explain how to expose an existing gRPC service as a REST API without duplicating code.\n\nMANDATORY REQUIREMENTS:\n1. Configure 'services.AddGrpcHttpApi()' in .NET 10.\n2. Annotate the .proto file with 'google.api.http' options (GET \"/api/users/{id}\").",
+      "Criteria": [
+        {
+          "Description": "Configures AddGrpcHttpApi() and Microsoft.AspNetCore.Grpc.JsonTranscoding",
+          "Weight": 50
+        },
+        {
+          "Description": "Shows correct annotation in .proto with option (google.api.http) = { get: \"/api/users/{id}\" }",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "HTTP/3: QUIC Configuration in Kestrel (.NET 10)",
+      "Category": "HTTP/3 & gRPC-JSON",
+      "Prompt": "Explain how to enable HTTP/3 (QUIC) on a .NET 10 Kestrel server.\n\nMANDATORY REQUIREMENTS:\n1. Configure 'builder.WebHost.ConfigureKestrel' with 'ListenAnyIP(5001, o => o.Protocols = HttpProtocols.Http3)'.\n2. Explain the requirements: TLS 1.3, valid certificate, and OS support.",
+      "Criteria": [
+        {
+          "Description": "Configures Kestrel with HttpProtocols.Http3 and explains that it requires TLS 1.3",
+          "Weight": 50
+        },
+        {
+          "Description": "Mentions certificate requirements and OS support (Windows 11/Server 2022+, modern Linux)",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "SignalR: Groups, Reconnection, and Back-Pressure with Channels",
+      "Category": "SignalR",
+      "Prompt": "A SignalR Hub broadcasts 10,000 events per second to all connected clients without flow control:\n\npublic class LiveFeedHub : Hub {\n    public async Task Subscribe(string topic) {\n        await Groups.AddToGroupAsync(Context.ConnectionId, topic);\n    }\n}\n\n// Broadcaster (background service):\nwhile (!ct.IsCancellationRequested) {\n    var evt = await GetNextEventAsync();\n    await _hubContext.Clients.Group(evt.Topic).SendAsync(\"OnEvent\", evt);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the back-pressure issue: sending events faster than WebSocket clients can consume them can overwhelm SignalR internal buffers and cause dropped connections.\n2. Refactor the broadcaster using a 'Channel<LiveEvent>' as a buffer: the producer writes via 'WriteAsync' and the consumer reads via 'ReadAllAsync', bounding throughput with 'BoundedChannelOptions { FullMode = BoundedChannelFullMode.DropOldest }'.",
+      "Criteria": [
+        {
+          "Description": "Explains the back-pressure issue in SignalR: sending data faster than WebSocket clients consume saturates buffers and causes client drops",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the broadcaster using Channel<T> with BoundedChannelOptions and FullMode = DropOldest to manage back-pressure",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Testing: Time Abstraction with TimeProvider (.NET 10)",
+      "Category": "Testing & Mocking",
+      "Prompt": "Refactor this code to make it testable:\n\npublic bool IsExpired(DateTime expirationDate) {\n    return DateTime.UtcNow > expirationDate;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the 'TimeProvider' class in .NET 10 for time abstraction and injection.\n2. Refactor injecting 'TimeProvider' and using 'timeProvider.GetUtcNow()'.",
+      "Criteria": [
+        {
+          "Description": "Explains that TimeProvider abstracts DateTime.UtcNow for unit testing",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors injecting TimeProvider in constructor and using GetUtcNow()",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Testing: WebApplicationFactory<T> with Configuration Override",
+      "Category": "Testing & Mocking",
+      "Prompt": "Create an integration test that replaces 'IEmailService' with a mock in WebApplicationFactory.\n\nMANDATORY REQUIREMENTS:\n1. Inherit from 'WebApplicationFactory<Program>' and override 'ConfigureWebHost'.\n2. Replace the real service using 'services.RemoveAll<IEmailService>(); services.AddSingleton<IEmailService>(mockEmail);'.",
+      "Criteria": [
+        {
+          "Description": "Inherits from WebApplicationFactory<Program> and overrides ConfigureWebHost",
+          "Weight": 50
+        },
+        {
+          "Description": "Uses services.RemoveAll and AddSingleton to replace the dependency",
+          "Weight": 50
+        }
+      ]
+    }
+  ]
+}

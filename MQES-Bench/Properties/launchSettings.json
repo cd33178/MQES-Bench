@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "MQES-Bench": {
+      "commandName": "Project",
+      "commandLineArgs": ""
+    }
+  }
+}

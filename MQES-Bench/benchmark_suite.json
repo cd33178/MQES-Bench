@@ -1,0 +1,1457 @@
+{
+  // ========================================================================
+  // CONSOLIDATED .NET 10 / SQL / MAUI / BLAZOR BENCHMARKING SUITE
+  // Sorted hierarchically by Category (A-Z) and Test Name (A-Z)
+  // ========================================================================
+  "Name": "Comprehensive .NET 10, C# 14, SQL, MAUI & Architecture Suite",
+  "DefaultSystemPrompt": "You are a Senior .NET Application Architect and SQL Server DBA expert in C# (.NET 8/9/10), CLR runtime internals (CLR, IL, GC, Memory Management), and T-SQL.\nWhen answering theoretical, design, and code refactoring challenges:\n1. Be extremely precise with CLR runtime internals and exact database terminology (e.g., state machine heap allocations, lock types, memory layout).\n2. Provide complete, production-ready, fully compiling code solutions without omitting key logic.\n3. Structure responses concisely while covering deep architectural mechanics.",
+  "DefaultUserPromptSuffix": "MANDATORY OUTPUT CONSTRAINTS:\n1. Provide complete, production-ready, fully compiling code snippets wrapped in standard markdown code blocks (e.g., ```csharp ... ``` or ```sql ... ```).\n2. Ensure all edge cases, memory allocations, and concurrency considerations are explicitly addressed.\n3. Keep technical explanations direct, rigorous, and free of unnecessary conversational filler.",
+  "DefaultJudgeSystemPrompt": "You are a strict, highly accurate technical evaluation judge for modern .NET 10, C# 14, CLR runtime internals, and T-SQL.\nCRITICAL EVALUATION GUIDELINES (AVOID FALSE NEGATIVES):\n1. C# 14 / .NET 10 Preview Specifications:\n   - Left-Hand Side (LHS) Null-Conditional Assignment (e.g., 'a?.b?.Status = Updated\"' or 'a?.b -= c') is a specific C# 14 (.NET 10) enhancement. Do NOT confuse it with legacy C# 8.0/10 null features or mark it as failing.\n   - Extension Blocks (syntax: 'extension Name for TargetType') supporting instance properties, static properties, and static methods are valid C# 14 specifications.\n   - Contextual 'field' keyword in property accessors and 'where T : allows ref struct' anti-constraints are valid modern .NET 10 specifications.\n2. Modern BCL Types (.NET 8/9/10):\n   - Acknowledge 'FrozenDictionary<TKey, TValue>', 'OrderedDictionary<TKey, TValue>', and 'System.Threading.Lock' as native BCL additions.\n   - If the model correctly explains internal layout advantages (immutable perfect/near-perfect hashing, O(1) lookups, EnterScope/lock keyword integration) and refactors using native methods (e.g., '.ToFrozenDictionary()'), score it as PASS.\n3. Semantics & Architectural Soundness:\n   - If the model satisfies the architectural and correctness intent of the criterion (e.g., non-blocking streaming, non-allocating spans, lock protection, Sargable date ranges), mark it as PASS even if slight cosmetic syntactic variations exist.\n4. Output Formatting:\\n   - Do NOT output internal thinking or reasoning steps.\n   - You must immediately output your final decision on the very first line as:\n   VERDICT: PASS\n   or\n   VERDICT: FAIL\n\n   Followed by a brief one-sentence reason.",
+  "Tests": [
+    // ------------------------------------------------------------------------
+    // CATEGORY: .NET 10 & C# 14
+    // ------------------------------------------------------------------------
+    {
+      "Name": ".NET 10: Contextual 'field' Keyword in Properties",
+      "Category": ".NET 10 & C# 14",
+      "Prompt": "Analyze the following C# class where property validation is required:\n\npublic class UserProfile {\n    private string _displayName;\n    public string DisplayName {\n        get => _displayName;\n        set => _displayName = string.IsNullOrWhiteSpace(value) \n            ? throw new ArgumentException(\"Invalid name\") \n            : value.Trim();\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the new C# 14 (.NET 10) feature that allows direct access to the compiler-generated backing field without manually declaring an explicit private field '_displayName'.\n2. Refactor the property using the contextual keyword 'field' to eliminate the explicit private field.",
+      "Criteria": [
+        {
+          "Description": "Explains that C# 14 in .NET 10 introduces the contextual 'field' keyword to access the backing field without manually declaring a private member",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the property by removing '_displayName' and using 'field' inside the setter while keeping validation logic intact",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Extension Blocks for Static Members and Properties",
+      "Category": ".NET 10 & C# 14",
+      "Prompt": "In C# 14 (.NET 10), Extension Blocks introduce the ability to extend types with instance properties, static properties, and static extension methods.\n\nWrite a C# 14 extension block for 'DateTime' that defines:\n1. An 'IsWeekend' instance property (returns bool).\n2. A 'DefaultFormat' static property (returns string).\n\nOUTPUT INSTRUCTIONS:\n1. Provide the complete C# 14 code block wrapped in ```csharp ... ``` using the 'extension ... for DateTime' syntax.\n2. Immediately follow the code block with a concise 1-2 paragraph technical explanation confirming that C# 14 extension blocks support instance properties, static properties, and static extension methods.",
+      "Criteria": [
+        {
+          "Description": "Explains extension block syntax (extension Name for TargetType) in C# 14, noting that it supports instance properties, static properties, and static extension methods",
+          "Weight": 50
+        },
+        {
+          "Description": "Writes C# 14 code using the 'extension ... for DateTime' structure, implementing the requested members correctly",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Implicit Conversion to Span<T> and ReadOnlySpan<T>",
+      "Category": ".NET 10 & C# 14",
+      "Prompt": "Analyze calls to this high-performance C# method:\n\npublic void ProcessBuffer(ReadOnlySpan<byte> data) { ... }\n\n// Calling client code:\npublic void Execute() {\n    byte[] rawBytes = GetBytes();\n    ProcessBuffer(rawBytes.AsSpan());\n    \n    string text = \"log_entry_header\";\n    ProcessText(text.AsSpan());\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain how C# 14 and .NET 10 simplify the use of 'Span<T>' and 'ReadOnlySpan<T>' by reducing ceremonial code in method invocations.\n2. Refactor the invocations by removing explicit '.AsSpan()' calls.",
+      "Criteria": [
+        {
+          "Description": "Explains that C# 14 introduces implicit conversions from arrays, strings, and stackalloc to Span<T> and ReadOnlySpan<T>, reducing syntactic ceremony and facilitating high-performance overloads",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the client code by passing 'rawBytes' and 'text' directly to methods without invoking '.AsSpan()'",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Natural Numeric Ordering with CompareOptions.NumericOrdering",
+      "Category": ".NET 10 & C# 14",
+      "Prompt": "Analyze the following scenario where a list of filenames contains numbers: '[\"Document1.txt\", \"Document10.txt\", \"Document2.txt\"]'. It needs to be sorted in natural/human order so that 'Document2.txt' appears before 'Document10.txt'.\n\nMANDATORY REQUIREMENTS:\n1. Explain the new native option incorporated into .NET 10 string comparison and sorting APIs (System.Globalization) that eliminates the need for regular expressions or Windows native APIs (StrCmpLogicalW).\n2. Refactor the string list sorting using 'CompareOptions.NumericOrdering' with StringComparer or string.Compare.",
+      "Criteria": [
+        {
+          "Description": "Identifies the addition of the 'CompareOptions.NumericOrdering' enum value in System.Globalization in .NET 10 for natural numeric string sorting",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors LINQ sorting using StringComparer.Create (with CultureInfo.CurrentCulture, CultureInfo.InvariantCulture, or equivalent CultureInfo) and CompareOptions.NumericOrdering, or equivalent string.Compare implementation",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Null-Conditional Assignment",
+      "Category": ".NET 10 & C# 14",
+      "Prompt": "Analyze the following defensive C# code block:\n\npublic void UpdateCustomerOrder(Customer? customer, decimal discount) {\n    if (customer != null && customer.CurrentOrder != null) {\n        customer.CurrentOrder.Status = \"Updated\";\n        customer.CurrentOrder.TotalAmount -= discount;\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the syntactic improvement in C# 14 (.NET 10) regarding null-conditional operators on the left-hand side of assignments.\n2. Refactor the method by eliminating the defensive 'if' blocks and applying direct null-conditional assignment (including compound operators like '-=').",
+      "Criteria": [
+        {
+          "Description": "Explains that C# 14 allows using the null-conditional operator '?.' on the left-hand side of an assignment or compound assignment, evaluating the right-hand side only if the receiver is not null",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code by removing the 'if' structure and applying 'customer?.CurrentOrder?.Status = \"Updated\"' along with direct compound assignments",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: .NET 10 & C# 14 - Data Types & Keywords
+    // ------------------------------------------------------------------------
+    {
+      "Name": ".NET 10: 'allows ref struct' Anti-Constraint in Generics",
+      "Category": ".NET 10 & C# 14 - Data Types & Keywords",
+      "Prompt": "In traditional C#, 'ref struct' types like 'Span<T>' and 'ReadOnlySpan<T>' could not be used as type arguments in generic methods (e.g., 'ProcessData<T>(T data)').\n\nMANDATORY REQUIREMENTS:\n1. Explain how the new language anti-constraint 'where T : allows ref struct' enables using 'ref struct' types in generics without violating stack-only memory safety rules.\n2. Write a generic method 'public void Process<T>(T input) where T : allows ref struct' and demonstrate invoking it with a 'ReadOnlySpan<char>'.",
+      "Criteria": [
+        {
+          "Description": "Explains the role of the 'allows ref struct' anti-constraint in allowing ref struct types as generic type parameters without risking promotion to the Managed Heap",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors/writes the generic method using the 'where T : allows ref struct' clause and invokes it correctly with a Span<T> or ReadOnlySpan<T>",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Generic OrderedDictionary<TKey, TValue> Collection",
+      "Category": ".NET 10 & C# 14 - Data Types & Keywords",
+      "Prompt": "In earlier .NET versions, developers had to choose between Dictionary<TKey, TValue> (fast O(1) key lookups but no insertion order) and List<KeyValuePair<TKey, TValue>> (preserves order, but slow O(N) lookups), or rely on the legacy non-generic System.Collections.Specialized.OrderedDictionary.\n\nMANDATORY REQUIREMENTS:\n1. Explain the native generic 'System.Collections.Generic.OrderedDictionary<TKey, TValue>' introduced in .NET 9/10, explaining its O(1) key lookups, deterministic insertion order preservation, and indexed access.\n2. Write a concise code example directly instantiating and consuming the built-in 'OrderedDictionary<string, int>' (demonstrating addition, access by key, and positional access by index). Do NOT implement a custom collection class from scratch.",
+      "Criteria": [
+        {
+          "Description": "Explains that .NET natively provides generic System.Collections.Generic.OrderedDictionary<TKey, TValue>, highlighting O(1) lookups, insertion-order preservation, and indexed access without requiring custom wrappers",
+          "Weight": 50
+        },
+        {
+          "Description": "Demonstrates instantiation and usage of built-in OrderedDictionary<TKey, TValue> showing both key-based lookup and positional index access without writing a custom dictionary class",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: Native Tensor<T> Data Type for Artificial Intelligence",
+      "Category": ".NET 10 & C# 14 - Data Types & Keywords",
+      "Prompt": "In modern .NET versions focused on Machine Learning and Artificial Intelligence workload acceleration, the 'Tensor<T>' data type was introduced within the 'System.Numerics.Tensors' namespace.\n\nMANDATORY REQUIREMENTS:\n1. Explain the purpose of the 'Tensor<T>' data type, detailing its differences from a traditional multidimensional array ('float[,]') regarding contiguous memory layout, SIMD acceleration, and ONNX/Torch interop.\n2. Write a C# code snippet that creates and initializes a dense multidimensional 'Tensor<float>' using the 'System.Numerics.Tensors' APIs.",
+      "Criteria": [
+        {
+          "Description": "Explains that Tensor<T> is a contiguous n-dimensional primitive type optimized for SIMD vector operations and high-performance interop with AI libraries",
+          "Weight": 50
+        },
+        {
+          "Description": "Writes a C# code example using 'Tensor.Create<float>' or direct 'Tensor<float>' instantiation, defining dimensions and data manipulation",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": ".NET 10: System.Threading.Lock Synchronization Type",
+      "Category": ".NET 10 & C# 14 - Data Types & Keywords",
+      "Prompt": "Historically in .NET, thread synchronization was performed using 'lock(new object())', which relies on System.Threading.Monitor and the object header sync block index.\n\nMANDATORY REQUIREMENTS:\n1. Explain the native 'System.Threading.Lock' type introduced in .NET 9/10, detailing how it replaces object-based Monitor locks, avoids sync block table overhead, and improves throughput.\n2. Provide a refactored thread-safe class using 'private readonly Lock _lock = new();' demonstrating synchronization. Note that either modern C# 'lock (_lock)' syntax or 'using (_lock.EnterScope())' is fully valid.",
+      "Criteria": [
+        {
+          "Description": "Explains that System.Threading.Lock provides a lightweight, dedicated synchronization primitive in .NET 9/10 that replaces legacy object/Monitor locking and reduces overhead",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the synchronization code to declare a System.Threading.Lock instance and uses either the modern 'lock (_lock)' statement or 'using (_lock.EnterScope())' for thread safety",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Adversarial - Async
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Trap: Async Void in Task Constructor",
+      "Category": "Adversarial - Async",
+      "Prompt": "Analyze the following C# code:\n\npublic void StartProcessing() {\n    var task = new Task(async () => {\n        await Task.Delay(1000);\n        SaveToDatabase();\n    });\n    task.Start();\n    task.Wait();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why SaveToDatabase() executes after task.Wait() finishes and what problem arises when using async inside the Task constructor.\n2. Refactor the method to use async/await properly without 'new Task', 'Start', or 'Wait'.",
+      "Criteria": [
+        {
+          "Description": "Explains that the async lambda is converted to 'async void' due to the Task(Action) overload and that the outer Task completes at the first await",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the method to an asynchronous 'async Task' signature, eliminating 'new Task', 'Start', and 'Wait' in the final solution",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Adversarial - EF Core
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Trap: Hallucinated EF Core API (BulkDeleteWithCascade)",
+      "Category": "Adversarial - EF Core",
+      "Prompt": "A consultant suggests using 'dbContext.AuditLogs.Where(x => x.Created < limitDate).BulkDeleteWithCascadeAsync();' to delete 100,000 old records without tracking.\n\nMANDATORY REQUIREMENTS:\n1. Explicitly confirm whether 'BulkDeleteWithCascadeAsync' exists or not in Microsoft's official EF Core SDK.\n2. Provide the official and native Microsoft solution for bulk database deletes using native LINQ 'ExecuteDeleteAsync()' syntax in EF Core 7+.",
+      "Criteria": [
+        {
+          "Description": "Explicitly identifies that 'BulkDeleteWithCascadeAsync' does NOT exist in Microsoft's official EF Core SDK",
+          "Weight": 50
+        },
+        {
+          "Description": "Provides refactored code explicitly using the native 'ExecuteDeleteAsync()' or 'ExecuteDelete()' method",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Adversarial - Memory
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Trap: Span<T> Across Await Boundary",
+      "Category": "Adversarial - Memory",
+      "Prompt": "A developer attempts to optimize memory in a .NET 10 asynchronous method by writing the following code:\n\npublic async Task<int> ProcessPayloadAsync(string jsonPayload) {\n    ReadOnlySpan<char> span = jsonPayload.AsSpan();\n    int id = FastParseId(span);\n    \n    await Task.Delay(100); // Simulating async I/O\n    \n    int status = FastParseStatus(span);\n    return id + status;\n}\n\nThe code fails to compile.\nMANDATORY REQUIREMENTS:\n1. Explain the exact technical reason why a 'ref struct' (such as Span<T>) cannot be part of an 'async' method state machine.\n2. Provide a refactoring that DOES COMPILE in C#: process Spans in synchronous helper methods (non-async) BEFORE or AFTER the 'await', or use 'ReadOnlyMemory<char>'. \n(TECHNICAL WARNING: An 'async' method CANNOT receive ReadOnlySpan<T> as a parameter either. Ensure you present valid C# code).",
+      "Criteria": [
+        {
+          "Description": "Explains that 'ref struct' types reside strictly on the Stack and the compiler forbids their use across await in async methods because state machines are allocated on the Heap",
+          "Weight": 50
+        },
+        {
+          "Description": "Provides a valid refactoring that compiles in C# (using synchronous helper methods or ReadOnlyMemory<char>)",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Adversarial - Source Generators
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Trap: Hallucinated Source Generator APIs (AutoNotify / [GenerateSerializer])",
+      "Category": "Adversarial - Source Generators",
+      "Prompt": "A developer claims that .NET includes the following built-in Source Generators out of the box for any C# project without extra packages:\n- '[AutoNotify]' — automatically generates 'INotifyPropertyChanged' for properties.\n- '[GenerateSerializer]' — generates a high-performance binary serializer for any POCO class.\n- '[Reactive]' — converts properties into ReactiveUI Observables.\n\nMANDATORY REQUIREMENTS:\n1. Evaluate each claim, explicitly stating which of these attributes/Source Generators exist natively in the .NET SDK without external NuGet packages.\n2. For each one that does NOT exist natively, identify which real package or SDK provides it (e.g., System.Text.Json, Orleans, ReactiveUI, Community Toolkit) or if it is pure hallucination.",
+      "Criteria": [
+        {
+          "Description": "Correctly identifies that '[AutoNotify]' does NOT exist in the .NET SDK: it is a documentation sample (Microsoft Docs) and the real implementation is provided by CommunityToolkit.Mvvm via [ObservableProperty]",
+          "Weight": 35
+        },
+        {
+          "Description": "Identifies that '[GenerateSerializer]' exists BUT only in Microsoft.Orleans (Orleans Serialization), not in the base .NET SDK or System.Text.Json",
+          "Weight": 35
+        },
+        {
+          "Description": "Identifies that '[Reactive]' is part of the ReactiveUI.Fody package (an IL weaver, not a native .NET Source Generator) and is not in the .NET SDK",
+          "Weight": 30
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Adversarial - T-SQL
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Trap: NOLOCK on UPDATE Statements",
+      "Category": "Adversarial - T-SQL",
+      "Prompt": "Analyze the following T-SQL query in a high-concurrency environment:\n\nUPDATE Inventory WITH (NOLOCK)\nSET Stock = Stock - 1\nWHERE ProductId = @Id AND Stock > 0;\n\nMANDATORY REQUIREMENTS:\n1. Explain the trap of using WITH (NOLOCK) in UPDATE statements, clarifying explicitly whether NOLOCK prevents the database engine from acquiring Exclusive locks (X locks) during data modification.\n2. Correct the T-SQL query by explicitly using 'WITH (UPDLOCK, HOLDLOCK)' or a SERIALIZABLE isolation level.",
+      "Criteria": [
+        {
+          "Description": "Explains that WITH (NOLOCK) only applies to the read/SELECT phase and that SQL Server always acquires Exclusive locks (X locks) to execute the UPDATE modification",
+          "Weight": 50
+        },
+        {
+          "Description": "Corrects the T-SQL script explicitly using 'WITH (UPDLOCK, HOLDLOCK)' or SERIALIZABLE isolation level",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Architecture & DI
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Architecture: Captive Dependencies (Singleton injecting Scoped)",
+      "Category": "Architecture & DI",
+      "Prompt": "Analyze the following Dependency Injection (DI) configuration in ASP.NET Core:\n\npublic class OrderProcessingService { // Registered as AddSingleton\n    private readonly AppDbContext _dbContext; // ❌ Injected Scoped DbContext in Singleton\n    public OrderProcessingService(AppDbContext dbContext) => _dbContext = dbContext;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the danger of 'Captive Dependencies' when a Singleton service captures a Scoped service (such as DbContext), leading to Memory Leaks, non-thread-safe DbContext operations, and stale data.\n2. Show both valid refactorings: changing 'OrderProcessingService' to Scoped or injecting 'IServiceScopeFactory' / 'IDbContextFactory<AppDbContext>' to create temporary scopes.",
+      "Criteria": [
+        {
+          "Description": "Explains the concept of Captive Dependency and the concurrency/threading and lifetime mismatch risks of injecting a Scoped service into a Singleton",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code by changing service lifetime to Scoped or injecting IServiceScopeFactory / IDbContextFactory to create safe scopes",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Architecture: HybridCache (.NET 9) vs IMemoryCache + IDistributedCache",
+      "Category": "Architecture & DI",
+      "Prompt": "An ASP.NET Core system uses two manual caching layers:\n\npublic async Task<ProductDto?> GetProductAsync(int id) {\n    var key = $\"product:{id}\";\n    if (_memCache.TryGetValue(key, out ProductDto? cached)) return cached;\n    \n    var bytes = await _distCache.GetAsync(key);\n    if (bytes != null) {\n        cached = Deserialize<ProductDto>(bytes);\n        _memCache.Set(key, cached, TimeSpan.FromMinutes(5));\n        return cached;\n    }\n    \n    cached = await _db.Products.FindAsync(id);\n    await _distCache.SetAsync(key, Serialize(cached), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30) });\n    _memCache.Set(key, cached, TimeSpan.FromMinutes(5));\n    return cached;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the limitations of the manual pattern (cache stampede / thundering herd, manual serialization, double invalidation) that HybridCache resolves.\n2. Refactor the method using the 'Microsoft.Extensions.Caching.Hybrid.HybridCache' API (GetOrCreateAsync) with LocalExpiration and DistributedExpiration options.",
+      "Criteria": [
+        {
+          "Description": "Explains the cache stampede (thundering herd) problem and manual serialization complexity resolved by HybridCache via native stampede locking",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using HybridCache.GetOrCreateAsync with HybridCacheEntryOptions specifying LocalExpiration and DistributedExpiration",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: ASP.NET Core Filters & Middleware
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Filters: IAsyncActionFilter with Response Caching",
+      "Category": "ASP.NET Core Filters & Middleware",
+      "Prompt": "Create an 'IAsyncActionFilter' in ASP.NET Core that implements HTTP response caching based on the '[ResponseCache(Duration = 60)]' attribute.\n\nMANDATORY REQUIREMENTS:\n1. Implement 'OnActionExecutionAsync' checking if the response exists in IMemoryCache.\n2. If cached, short-circuit execution with 'context.Result = new ObjectResult(cachedData)'.",
+      "Criteria": [
+        {
+          "Description": "Correctly implements IAsyncActionFilter with cache-lookup logic in OnActionExecutionAsync",
+          "Weight": 50
+        },
+        {
+          "Description": "Short-circuits execution without invoking 'await next()' when data is cached",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Middleware: Execution Order and Short-Circuiting",
+      "Category": "ASP.NET Core Filters & Middleware",
+      "Prompt": "Analyze this ASP.NET Core pipeline:\n\napp.UseAuthentication();\napp.UseAuthorization();\napp.UseStaticFiles();\napp.UseRouting();\napp.UseEndpoints(...);\n\nMANDATORY REQUIREMENTS:\n1. Identify the fatal error in middleware ordering (UseStaticFiles after UseRouting).\n2. Explain the concept of 'short-circuiting' in middleware and correct the order.",
+      "Criteria": [
+        {
+          "Description": "Identifies that UseStaticFiles must be placed BEFORE UseRouting to short-circuit static file requests",
+          "Weight": 50
+        },
+        {
+          "Description": "Shows the correct order: UseStaticFiles → UseRouting → UseAuthentication → UseAuthorization → UseEndpoints",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Async & Concurrency
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Async: IAsyncEnumerable for Database Data Streaming",
+      "Category": "Async & Concurrency",
+      "Prompt": "Analyze this repository method returning millions of audit records:\n\npublic async Task<List<AuditLog>> GetAllLogsAsync(DbContext db) {\n    return await db.AuditLogs.ToListAsync(); // ❌ Materializes entire dataset in memory\n}\n\n// Consumer:\nvar logs = await repo.GetAllLogsAsync(db);\nforeach (var log in logs) { await ProcessAsync(log); }\n\nMANDATORY REQUIREMENTS:\n1. Explain why returning 'List<T>' from a database streaming operation can cause an OutOfMemoryException and high initial latency before the first item is processed.\n2. Refactor the repository to return 'IAsyncEnumerable<AuditLog>' using 'yield return' inside an async method iterating the DbSet with 'await foreach', and show the updated consumer.",
+      "Criteria": [
+        {
+          "Description": "Explains that materializing the entire collection with ToListAsync() loads millions of records into RAM before processing the first element",
+          "Weight": 40
+        },
+        {
+          "Description": "Refactors the repository to return IAsyncEnumerable<AuditLog> with yield return and updates the consumer to use await foreach",
+          "Weight": 60
+        }
+      ]
+    },
+    {
+      "Name": "Async: Inadvertent Fire-and-Forget due to Missing await",
+      "Category": "Async & Concurrency",
+      "Prompt": "Analyze the following order service method:\n\npublic async Task ProcessOrderAsync(Order order) {\n    AuditLogAsync(order.Id); // Method returning Task\n    await ShipOrderAsync(order);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the consequences of invoking 'AuditLogAsync' without the 'await' keyword (race conditions, lost exceptions).\n2. Refactor the code to ensure sequential execution or proper handling for intentional concurrent execution.",
+      "Criteria": [
+        {
+          "Description": "Explains that invoking a Task-returning method without 'await' runs the task in the background without synchronization, causing race conditions and lost exceptions",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code by adding 'await' to the asynchronous call or coordinating it via Task.WhenAll for concurrent execution",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Async: Misuse of Task.Run Wrapping Naturally Asynchronous Operations",
+      "Category": "Async & Concurrency",
+      "Prompt": "Analyze the following repository method querying an external HTTP service:\n\npublic async Task<string> FetchUserDataAsync(string userId) {\n    return await Task.Run(async () => {\n        using var client = new HttpClient();\n        var response = await client.GetAsync($\"https://api.example.com/users/{userId}\");\n        return await response.Content.ReadAsStringAsync();\n    });\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why wrapping asynchronous I/O calls inside 'Task.Run' is an anti-pattern in .NET and how it negatively affects the ThreadPool.\n2. Refactor the method by removing the unnecessary wrapper and maintaining a clean asynchronous flow.",
+      "Criteria": [
+        {
+          "Description": "Explains that wrapping asynchronous I/O operations in Task.Run wastes a ThreadPool thread unnecessarily and adds state machine overhead without providing real parallelism",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors by removing Task.Run and directly awaiting the asynchronous I/O calls end-to-end",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Async: Mixing Parallel.ForEach with Async Lambdas",
+      "Category": "Async & Concurrency",
+      "Prompt": "Analyze the following method attempting to process multiple URLs asynchronously:\n\npublic void DownloadAll(List<string> urls) {\n    Parallel.ForEach(urls, async url => {\n        await DownloadFileAsync(url);\n    });\n    Console.WriteLine(\"Downloads completed.\");\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why 'Parallel.ForEach' does not await asynchronous tasks and what happens internally with unhandled exceptions.\n2. Refactor the code using the appropriate .NET 6+ API for parallel asynchronous iteration.",
+      "Criteria": [
+        {
+          "Description": "Explains that Parallel.ForEach accepts Action<T>, converting the async lambda into 'async void', causing the loop to return before tasks complete and silencing/crashing on exceptions",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using Parallel.ForEachAsync with await to coordinate parallel asynchronous execution correctly",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Async: Use of async void in Business Logic Methods",
+      "Category": "Async & Concurrency",
+      "Prompt": "Analyze the following processing service in a C# application:\n\npublic class PaymentProcessor {\n    public async void ProcessPayment(PaymentRequest request) {\n        await _gateway.ChargeAsync(request);\n        await _db.SaveReceiptAsync(request);\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the risks of using 'async void' outside of Event Handlers, detailing what happens with unhandled exceptions and the caller's inability to await completion.\n2. Refactor the signature and method according to asynchronous best practices.",
+      "Criteria": [
+        {
+          "Description": "Explains that async void prevents callers from using await, makes catching exceptions with try/catch impossible, and can crash the process on unhandled exceptions",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the method return type to 'async Task' to allow safe exception propagation and proper awaiting",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Async: Using ConfigureAwait(false) in Class Libraries",
+      "Category": "Async & Concurrency",
+      "Prompt": "Analyze the following code within a reusable class library (NuGet / Class Library) consumed by WPF, MAUI, and ASP.NET applications:\n\npublic async Task<UserData> LoadUserAsync(int id) {\n    var json = await _client.GetStringAsync($\"/users/{id}\");\n    return JsonSerializer.Deserialize<UserData>(json);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why using 'ConfigureAwait(false)' is a best practice in class library code and what problems it avoids when consumed by UI applications with a SynchronizationContext.\n2. Refactor the query by adding 'ConfigureAwait(false)'.",
+      "Criteria": [
+        {
+          "Description": "Explains the role of ConfigureAwait(false) in preventing SynchronizationContext capture in class libraries, avoiding unnecessary UI thread hops and deadlocks",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the asynchronous call by adding .ConfigureAwait(false) along the library task chain",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Blazor
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Blazor: Global State Memory Leak (IDisposable)",
+      "Category": "Blazor",
+      "Prompt": "A Blazor component (.razor) subscribes to an event on a Singleton 'AppState' service:\n\n@inject AppState State\n@code {\n    protected override void OnInitialized() {\n        State.OnBalanceChanged += () => InvokeAsync(StateHasChanged);\n    }\n}\n\nMANDATORY REQUIREMENTS:\nExplain the root cause of the Memory Leak based on object Lifetimes: why a long-lived 'Singleton' service maintains a 'Strong Reference' to the short-lived Blazor component instance via the delegate. Show the solution by implementing '@implements IDisposable' and unsubscribing from the event.",
+      "Criteria": [
+        {
+          "Description": "Explicitly explains the Lifetime mismatch (the Singleton service retains the shorter-lived component instance in memory via the event delegate)",
+          "Weight": 50
+        },
+        {
+          "Description": "Implements '@implements IDisposable' and unsubscribes from the event ('-=') inside the Dispose() method",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Blazor: Static SSR with @attribute [StreamRendering] (.NET 8+)",
+      "Category": "Blazor",
+      "Prompt": "A Blazor component in Static Server-Side Rendering (SSR) mode loads a product list from the database:\n\n@page \"/products\"\n@inject ProductService Svc\n\n@if (_products == null) {\n    <p>Loading...</p>\n} else {\n    @foreach (var p in _products) { <ProductCard Product=\"p\" /> }\n}\n\n@code {\n    private List<Product>? _products;\n    protected override async Task OnInitializedAsync() {\n        _products = await Svc.GetAllAsync(); // Slow query: 2 seconds\n    }\n}\n\nThe user sees a blank page for 2 seconds before any content is displayed.\nMANDATORY REQUIREMENTS:\n1. Explain the limitation of Static SSR without streaming: the server completes all rendering before sending the initial HTML bytes to the client.\n2. Add '@attribute [StreamRendering]' and show how the component sends placeholder HTML ('Loading...') immediately, then updates the DOM once data becomes available.",
+      "Criteria": [
+        {
+          "Description": "Explains that without streaming the server blocks the entire HTTP response until component rendering finishes completely",
+          "Weight": 40
+        },
+        {
+          "Description": "Adds '@attribute [StreamRendering]' to the component, showing that placeholder HTML is sent immediately and data streams in once ready",
+          "Weight": 60
+        }
+      ]
+    },
+    {
+      "Name": "Blazor: Unnecessary Re-rendering (EventCallback vs Action)",
+      "Category": "Blazor",
+      "Prompt": "A Blazor child component exposes a callback to its parent using 'Action':\n[Parameter] public Action OnDataSaved { get; set; }\n\nThe developer notices that the parent UI does NOT automatically update when 'OnDataSaved' is invoked.\nMANDATORY REQUIREMENTS:\n1. Explicitly explain in the explanatory text (not just code comments) that 'EventCallback' or 'EventCallback<T>' includes a dispatcher that automatically invokes 'StateHasChanged()' on the parent component.\n2. Replace 'Action' with '[Parameter] public EventCallback OnDataSaved { get; set; }' and invoke it using 'await OnDataSaved.InvokeAsync()'.",
+      "Criteria": [
+        {
+          "Description": "Explicitly explains in text that EventCallback automatically triggers StateHasChanged() on the parent component",
+          "Weight": 50
+        },
+        {
+          "Description": "Replaces 'Action' with '[Parameter] public EventCallback OnDataSaved { get; set; }' and invokes it via await OnDataSaved.InvokeAsync()",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: C# Core
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Async Concurrency & Race Conditions",
+      "Category": "C# Core",
+      "Prompt": "Analyze this C# Singleton code processing concurrent tasks:\n\npublic class WorkerService {\n    private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(5);\n    private readonly List<string> _results = new List<string>();\n    public async Task ProcessItemsAsync(List<string> items) {\n        var tasks = items.Select(async item => {\n            _semaphore.Wait();\n            var processed = await TransformAsync(item);\n            _results.Add(processed);\n            _semaphore.Release();\n        });\n        Task.WaitAll(tasks.ToArray());\n    }\n    private async Task<string> TransformAsync(string input) => await Task.FromResult(input.ToUpper());\n}\n\nMANDATORY REQUIREMENTS:\nExplicitly mention the 4 errors and their solutions in the text:\n1. Replace 'Task.WaitAll' with 'Task.WhenAll'.\n2. Replace 'Wait()' with 'WaitAsync()' on the semaphore.\n3. Protect the non-thread-safe 'List<T>' (using lock or ConcurrentBag).\n4. Wrap 'Release()' inside a 'try/finally' block.",
+      "Criteria": [
+        {
+          "Description": "Identifies replacing Task.WaitAll with Task.WhenAll",
+          "Weight": 25
+        },
+        {
+          "Description": "Explicitly identifies using WaitAsync() instead of Wait()",
+          "Weight": 25
+        },
+        {
+          "Description": "Identifies that List<T> is not thread-safe (recommends ConcurrentBag or Lock)",
+          "Weight": 25
+        },
+        {
+          "Description": "Uses try/finally to guarantee semaphore Release()",
+          "Weight": 25
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Code Quality & Safety
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Code Quality: Improper Exception Handling and StackTrace Loss",
+      "Category": "Code Quality & Safety",
+      "Prompt": "Analyze the following exception handling block in a business layer:\n\npublic async Task ProcessPaymentAsync(PaymentRequest request) {\n    try {\n        await _paymentGateway.ChargeAsync(request);\n    } catch (Exception ex) {\n        _logger.LogError(\"Error processing payment\");\n        // ❌ Overwrites and destroys original StackTrace\n        throw ex;\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the two critical mistakes: using 'throw ex;' which overwrites and destroys the original StackTrace, and the 'Pokemon Exception Handling' anti-pattern (blindly catching generic Exception without proper rethrow or wrapping).\n2. Refactor the code using 'throw;' to preserve the stack trace or wrap the original exception inside a custom exception ('throw new PaymentException(\"...\", ex);').",
+      "Criteria": [
+        {
+          "Description": "Explains that 'throw ex;' destroys the original StackTrace, hindering debugging, and critiques generic 'Exception' catching",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the catch block using direct 'throw;' to preserve the trace or rethrows a custom exception wrapping the original (inner exception)",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Code Quality: Misuse of Null-Forgiving Operator (!)",
+      "Category": "Code Quality & Safety",
+      "Prompt": "Analyze the following C# code with Nullable Reference Types (NRT) enabled:\n\npublic class UserService {\n    private readonly IUserRepository _repo;\n    public UserService(IUserRepository repo) => _repo = repo;\n\n    public async Task<string> GetUserCityAsync(int userId) {\n        // ❌ Silencing compiler warnings with '!' without actual validation\n        var user = await _repo.FindUserAsync(userId);\n        return user!.Address!.City!;\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the pitfall of using the Null-Forgiving Operator ('!'): it masks compiler warnings without runtime safety, risking a NullReferenceException.\n2. Refactor the method using defensive null checks (pattern matching 'is null', guard clauses, or the '??' null-coalescing expression).",
+      "Criteria": [
+        {
+          "Description": "Explains that the null-forgiving operator (!) only silences compiler warnings but does not prevent runtime NullReferenceExceptions",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors code adding real defensive validation (pattern matching, guard clauses, or null-coalescing operator)",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Concurrency
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Concurrency: Misuse of Task.Run for Heavy CPU-Bound Work vs Parallel.For",
+      "Category": "Concurrency",
+      "Prompt": "Analyze the following CPU-intensive numerical algorithm processing an array of 10,000,000 items:\n\npublic async Task ProcessHeavyMatrixAsync(double[] data) {\n    var tasks = new List<Task>();\n    for (int i = 0; i < data.Length; i++) {\n        int index = i;\n        // ❌ Spawning 10 million individual Tasks for pure CPU operations\n        tasks.Add(Task.Run(() => {\n            data[index] = Math.Sin(data[index]) * Math.Cos(data[index]);\n        }));\n    }\n    await Task.WhenAll(tasks);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the performance collapse caused by Heap Allocation Overhead of millions of 'Task' objects and ThreadPool context switching saturation when using 'Task.Run' in a fine-grained loop for CPU-bound tasks.\n2. Refactor the method using 'Parallel.For' or 'Parallel.ForEach' (synchronous or partitioned) to distribute work efficiently across CPU cores with zero Task allocation overhead on the Heap.",
+      "Criteria": [
+        {
+          "Description": "Explains that spawning millions of Tasks via Task.Run in a loop allocates massive objects on the Heap and saturates the ThreadPool scheduler through context switching overhead",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using Parallel.For or Parallel.ForEach to parallelize CPU-bound calculations using efficient CPU core partitioning",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Concurrency: Parallel.ForEach in I/O Operations (Thread Starvation)",
+      "Category": "Concurrency",
+      "Prompt": "Analyze the following code used to download 500 PDF reports:\n\nParallel.ForEach(pdfUrls, url => {\n    using var client = new HttpClient();\n    var data = client.GetByteArrayAsync(url).Result;\n    SaveToDisk(url, data);\n});\n\nMANDATORY REQUIREMENTS:\n1. Explain the difference between CPU-Bound and I/O-Bound workloads, and why 'Parallel.ForEach' causes ThreadPool thread starvation in network operations.\n2. Refactor the code using the 'Parallel.ForEachAsync' API with 'ParallelOptions.MaxDegreeOfParallelism = 10' and asynchronous calls with await.",
+      "Criteria": [
+        {
+          "Description": "Explains the difference between CPU-Bound and I/O-Bound tasks, highlighting that Parallel.ForEach blocks ThreadPool threads waiting on network I/O instead of yielding",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using Parallel.ForEachAsync with ParallelOptions { MaxDegreeOfParallelism = 10 } and asynchronous await calls",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Concurrency: Parallel.ForEachAsync vs Task.WhenAll for I/O Throttling",
+      "Category": "Concurrency",
+      "Prompt": "Analyze this C# function that processes a list of 1,000 IDs by sending requests to a REST API with a rate limit of 10 simultaneous requests:\n\npublic async Task ProcessOrdersAsync(List<int> orderIds, HttpClient client) {\n    // ❌ Attempts to fire 1,000 simultaneous network requests all at once\n    var tasks = orderIds.Select(id => SendApiRequestAsync(client, id));\n    await Task.WhenAll(tasks);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the risks of using 'Task.WhenAll' without throttling on I/O operations (socket exhaustion, memory saturation, and HTTP 429 Too Many Requests).\n2. Refactor the method showing the modern solution using 'Parallel.ForEachAsync' with 'ParallelOptions.MaxDegreeOfParallelism = 10' for non-blocking asynchronous I/O with strict concurrency control.",
+      "Criteria": [
+        {
+          "Description": "Explains that unthrottled Task.WhenAll causes memory spikes, socket exhaustion, and HTTP 429 errors due to lack of concurrency control",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using Parallel.ForEachAsync with ParallelOptions { MaxDegreeOfParallelism = 10 } and asynchronous await calls",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Concurrency: PLINQ (Parallel LINQ) for In-Memory Batch Processing",
+      "Category": "Concurrency",
+      "Prompt": "Analyze the following method performing complex mathematical transformations and filtering over a list of 5,000,000 in-memory objects:\n\npublic List<ProcessedRecord> ProcessData(List<RawRecord> records) {\n    // ❌ Single-threaded sequential LINQ processing for 5 million CPU-bound records\n    return records\n        .Where(r => r.IsValid)\n        .Select(r => ComputeComplexHashes(r))\n        .ToList();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain when it is appropriate to use Parallel LINQ (PLINQ) with '.AsParallel()' to utilize all logical CPU cores for large in-memory collections (CPU-Bound), and why it should NOT be used if invoked methods perform blocking I/O (database or network).\n2. Refactor the query using '.AsParallel()', preserving or omitting order as appropriate ('.AsOrdered()'), and controlling concurrency with '.WithDegreeOfParallelism()'.",
+      "Criteria": [
+        {
+          "Description": "Explains that PLINQ (.AsParallel) partitions massive in-memory collections across CPU cores for CPU-bound tasks, but should not be used for blocking I/O operations",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the LINQ query by adding .AsParallel() and .WithDegreeOfParallelism() (or .AsOrdered() if applicable) for parallel in-memory processing",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Concurrency: Producer-Consumer Pattern with Channels",
+      "Category": "Concurrency",
+      "Prompt": "Analyze the following background queue implementation:\n\npublic class WorkQueue {\n    private readonly BlockingCollection<WorkItem> _queue = new();\n    \n    public void Enqueue(WorkItem item) => _queue.Add(item);\n    \n    public void ProcessQueue() {\n        foreach (var item in _queue.GetConsumingEnumerable()) {\n            ProcessItem(item);\n        }\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why 'System.Threading.Channels' (Channel<T>) is superior for asynchronous scenarios compared to 'BlockingCollection<T>', which blocks ThreadPool threads synchronously on '.Take()' or 'GetConsumingEnumerable()'.\n2. Refactor the code using 'Channel.CreateUnbounded<WorkItem>()' (or Bounded), writing with 'Writer.WriteAsync()' and reading asynchronously in a non-blocking manner with 'Reader.ReadAllAsync()'.",
+      "Criteria": [
+        {
+          "Description": "Explains that System.Threading.Channels is designed for async/await without blocking ThreadPool threads, unlike BlockingCollection",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors Producer-Consumer communication using Channel.CreateUnbounded/Bounded, Writer, and Reader.ReadAllAsync()",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Dapper Performance
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Dapper: Implicit Type Conversion (VARCHAR vs DbString)",
+      "Category": "Dapper Performance",
+      "Prompt": "Analyze the following Dapper query in C# targeting a SQL Server table where 'ProductCode' is defined as 'VARCHAR(50)' with a non-clustered index:\n\npublic async Task<Product> GetProductAsync(IDbConnection db, string code) {\n    return await db.QueryFirstOrDefaultAsync<Product>(\n        \"SELECT Id, ProductCode, Name FROM Products WHERE ProductCode = @code\",\n        new { code }\n    );\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why Dapper maps C# 'string' types by default to 'NVARCHAR' (Unicode), forcing SQL Server to perform an implicit conversion (CONVERT_IMPLICIT) on the VARCHAR column, negating Index Seek capability.\n2. Refactor the parameter in Dapper using 'DbString' with 'IsAnsi = true' (or 'AnsiString') to explicitly force VARCHAR and preserve index performance.",
+      "Criteria": [
+        {
+          "Description": "Explains that Dapper sends strings as NVARCHAR by default and that implicit conversion from VARCHAR to NVARCHAR in SQL Server invalidates Index Seek usage",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the parameter using 'new DbString { Value = code, IsAnsi = true }' to explicitly send a VARCHAR type to SQL Server",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Dapper: Memory Buffering vs Unbuffered Streaming (buffered: false)",
+      "Category": "Dapper Performance",
+      "Prompt": "Analyze this C# Dapper method processing a massive log export report:\n\npublic async Task<List<LogEntry>> ExportLogsAsync(IDbConnection db, DateTime startDate) {\n    // ❌ Default buffered: true loading of millions of records\n    var logs = await db.QueryAsync<LogEntry>(\"SELECT Id, Timestamp, Message, StackTrace FROM SystemLogs WHERE Timestamp >= @startDate\", new { startDate });\n    return logs.ToList();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why the default 'buffered: true' parameter in Dapper loads the entire result set into RAM before returning, risking an OutOfMemoryException on large tables.\n2. Refactor the query passing 'buffered: false' to stream rows row-by-row through an 'IEnumerable' without buffering the entire dataset in memory.",
+      "Criteria": [
+        {
+          "Description": "Explains that 'buffered: true' (default) fetches the entire DataReader into RAM before returning, creating an OutOfMemoryException risk",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the call passing 'buffered: false' to process the data stream line-by-line",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Dapper: N+1 Problem and QueryMultiple Usage",
+      "Category": "Dapper Performance",
+      "Prompt": "Analyze the following C# service code using Dapper to fetch orders and items:\n\npublic async Task<List<OrderDto>> GetCustomerOrdersAsync(IDbConnection db, int customerId) {\n    var orders = (await db.QueryAsync<OrderDto>(\"SELECT Id, OrderDate, Total FROM Orders WHERE CustomerId = @customerId\", new { customerId })).ToList();\n    \n    // ❌ N+1 database round-trips inside a loop\n    foreach (var order in orders) {\n        order.Items = (await db.QueryAsync<OrderItem>(\"SELECT Id, ProductName, Price FROM OrderItems WHERE OrderId = @id\", new { id = order.Id })).ToList();\n    }\n    return orders;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the catastrophic impact on network latency and database I/O overhead caused by the N+1 query pattern in Dapper.\n2. Refactor the method to execute a SINGLE database call using 'db.QueryMultipleAsync()', sequentially reading both result sets with 'multi.ReadAsync<OrderDto>()' and 'multi.ReadAsync<OrderItem>()' in one clean round-trip.",
+      "Criteria": [
+        {
+          "Description": "Explains that N+1 queries trigger multiple network round-trips and saturate database connection pools",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the query to a single round-trip strictly using db.QueryMultipleAsync() and reading sets sequentially with ReadAsync",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Dapper: String Interpolation and Plan Cache Pollution",
+      "Category": "Dapper Performance",
+      "Prompt": "Analyze the following code in a C# microservice using Dapper:\n\npublic async Task<IEnumerable<Customer>> GetCustomersByCityAsync(IDbConnection db, string city) {\n    // ❌ Direct string interpolation in SQL query\n    string sql = $\"SELECT Id, Name, City FROM Customers WHERE City = '{city}'\";\n    return await db.QueryAsync<Customer>(sql);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the two critical issues caused by direct interpolation in Dapper: SQL Injection vulnerability and Query Plan Cache Pollution in SQL Server.\n2. Refactor the query using Dapper anonymous parameterization ('SELECT ... WHERE City = @City', new { City = city }) to guarantee security and execution plan reuse.",
+      "Criteria": [
+        {
+          "Description": "Explains that direct interpolation exposes SQL Injection and prevents execution plan reuse, generating Plan Cache Pollution in SQL Server",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the query using Dapper's anonymous parameter object (@City, new { City = city })",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: EF Core
+    // ------------------------------------------------------------------------
+    {
+      "Name": "EF Core: Compiled Queries for Hot Paths",
+      "Category": "EF Core",
+      "Prompt": "Analyze the following ASP.NET Core endpoint invoked 10,000 times per second:\n\npublic async Task<User?> GetUserByIdAsync(AppDbContext db, int userId) {\n    return await db.Users\n        .AsNoTracking()\n        .FirstOrDefaultAsync(u => u.Id == userId);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the cost of repeated LINQ compilation: on each invocation EF Core translates the expression tree to SQL, validates the model, and generates execution plans from scratch.\n2. Refactor the code using 'EF.CompileAsyncQuery' to pre-compile the query once during application startup as a static field, eliminating translation overhead on hot paths.",
+      "Criteria": [
+        {
+          "Description": "Explains that EF Core recompiles the LINQ expression to SQL on each invocation (expression tree translation, model validation), incurring repetitive overhead on hot paths",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code by declaring a static field with EF.CompileAsyncQuery and using it in the query method",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "EF Core: Misuse of .ToList() and Premature LINQ Materialization",
+      "Category": "EF Core",
+      "Prompt": "Analyze this LINQ query against a database with 2,000,000 records:\n\npublic async Task<List<ProductDto>> GetActiveExpensiveProductsAsync(AppDbContext context) {\n    // ❌ Premature materialization with .ToList()\n    var allProducts = context.Products.ToList();\n    \n    var filtered = allProducts\n        .Where(p => p.IsActive && p.Price > 1000)\n        .Select(p => new ProductDto { Id = p.Id, Name = p.Name })\n        .Take(10)\n        .ToList();\n        \n    return filtered;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the performance disaster caused by invoking '.ToList()' prematurely: downloading 2 million complete rows from the database into C# RAM and performing filtering client-side instead of in SQL Server.\n2. Refactor the query maintaining the 'IQueryable' chain so that the SQL translation executes WHERE, SELECT, and TOP(10) directly in the database, postponing asynchronous materialization to the end with 'await ...ToListAsync()'.",
+      "Criteria": [
+        {
+          "Description": "Explains that calling .ToList() prematurely downloads the full table into RAM, executing filtering client-side instead of delegating to SQL Server",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the query maintaining the IQueryable chain to postpone async materialization with await .ToListAsync() at the end",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Native Bulk Update in EF Core 8/9/10",
+      "Category": "EF Core",
+      "Prompt": "I need to increase product prices by 10% where CategoryId = 5 across a table with 500k rows.\nWrite optimized C# Entity Framework Core 8/9/10 code executed directly in the database without loading entities into the application server's memory.\nMANDATORY REQUIREMENT: Use the native LINQ API 'ExecuteUpdateAsync' (or 'ExecuteUpdate'). Do NOT use raw SQL (ExecuteSqlRaw) or SaveChanges.",
+      "Criteria": [
+        {
+          "Description": "Uses ExecuteUpdateAsync or ExecuteUpdate with native LINQ syntax",
+          "Weight": 70
+        },
+        {
+          "Description": "Avoids SaveChanges/ToListAsync, raw SQL, or in-memory entity iteration",
+          "Weight": 30
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: gRPC
+    // ------------------------------------------------------------------------
+    {
+      "Name": "gRPC: Server Streaming vs Unary RPC for Bulk Data Export",
+      "Category": "gRPC",
+      "Prompt": "A gRPC service returns a report containing 500,000 transaction rows using a Unary RPC:\n\nservice ReportService {\n    rpc GetTransactions(ReportRequest) returns (TransactionListResponse);\n}\n\nThe C# service implements:\npublic override async Task<TransactionListResponse> GetTransactions(\n    ReportRequest request, ServerCallContext context) {\n    var all = await _db.Transactions.ToListAsync(); // ❌ Loads all into memory\n    return new TransactionListResponse { Transactions = { all.Select(Map) } };\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why using Unary RPC for massive datasets buffers the entire response in memory before sending the first byte to the client, spiking latency and RAM consumption.\n2. Refactor the .proto contract to 'server_streaming' RPC and the C# server implementation using 'IServerStreamWriter<Transaction>' with 'await responseStream.WriteAsync()' inside an 'await foreach'.",
+      "Criteria": [
+        {
+          "Description": "Explains that Unary RPC materializes the complete response in memory before transmitting, making it unsuitable for massive datasets",
+          "Weight": 40
+        },
+        {
+          "Description": "Refactors the .proto to 'rpc GetTransactions(ReportRequest) returns (stream Transaction)' and implements IServerStreamWriter with WriteAsync streaming",
+          "Weight": 60
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: HTTP/3 & gRPC-JSON
+    // ------------------------------------------------------------------------
+    {
+      "Name": "gRPC-JSON: REST to gRPC Transcoding",
+      "Category": "HTTP/3 & gRPC-JSON",
+      "Prompt": "Explain how to expose an existing gRPC service as a REST API without duplicating code.\n\nMANDATORY REQUIREMENTS:\n1. Configure 'services.AddGrpcHttpApi()' in .NET 10.\n2. Annotate the .proto file with 'google.api.http' options (GET \"/api/users/{id}\").",
+      "Criteria": [
+        {
+          "Description": "Configures AddGrpcHttpApi() and Microsoft.AspNetCore.Grpc.JsonTranscoding",
+          "Weight": 50
+        },
+        {
+          "Description": "Shows correct annotation in .proto with option (google.api.http) = { get: \"/api/users/{id}\" }",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "HTTP/3: QUIC Configuration in Kestrel (.NET 10)",
+      "Category": "HTTP/3 & gRPC-JSON",
+      "Prompt": "Explain how to enable HTTP/3 (QUIC) on a .NET 10 Kestrel server.\n\nMANDATORY REQUIREMENTS:\n1. Configure 'builder.WebHost.ConfigureKestrel' with 'ListenAnyIP(5001, o => o.Protocols = HttpProtocols.Http3)'.\n2. Explain the requirements: TLS 1.3, valid certificate, and OS support.",
+      "Criteria": [
+        {
+          "Description": "Configures Kestrel with HttpProtocols.Http3 and explains that it requires TLS 1.3",
+          "Weight": 50
+        },
+        {
+          "Description": "Mentions certificate requirements and OS support (Windows 11/Server 2022+, modern Linux)",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: I/O Performance
+    // ------------------------------------------------------------------------
+    {
+      "Name": "I/O Performance: Synchronous Blocking Network and HTTP Calls",
+      "Category": "I/O Performance",
+      "Prompt": "Analyze the following method consuming an external REST API inside an ASP.NET Core critical path:\n\npublic async Task<string> FetchExternalReportAsync(HttpClient client, string url) {\n    var request = new HttpRequestMessage(HttpMethod.Get, url);\n    \n    // ❌ Synchronous blocking network dispatch\n    HttpResponseMessage response = client.Send(request);\n    \n    // ❌ Synchronous response Stream reading\n    using var reader = new StreamReader(response.Content.ReadAsStream());\n    return reader.ReadToEnd();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why using 'client.Send()' or 'StreamReader.ReadToEnd()' synchronously blocks execution threads during network I/O latency, degrading overall server scalability.\n2. Refactor the method using end-to-end asynchronous calls with 'await client.SendAsync()' (or 'GetAsync()') and 'await response.Content.ReadAsStringAsync()' (or 'ReadToEndAsync()').",
+      "Criteria": [
+        {
+          "Description": "Explains that synchronous network calls (client.Send / ReadToEnd) freeze execution threads during network I/O latency",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors network calls using client.SendAsync / GetAsync and ReadToEndAsync / ReadAsStringAsync with await end-to-end",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "I/O Performance: Synchronous File System Operations in Async Methods",
+      "Category": "I/O Performance",
+      "Prompt": "Analyze the following method in a high-traffic Web API / Service processing configuration and data files:\n\npublic async Task<ProcessResult> ProcessCustomerDataAsync(string filePath) {\n    // ❌ Synchronous blocking disk read inside async flow\n    string jsonContent = File.ReadAllText(filePath);\n    \n    var result = await ProcessDataWithApiAsync(jsonContent);\n    \n    // ❌ Synchronous blocking disk write\n    File.WriteAllText(filePath, result.SerializedData);\n    return result;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the negative impact of calling synchronous File System methods ('File.ReadAllText', 'File.WriteAllText') on ThreadPool threads within async requests, causing Thread Starvation under high concurrency.\n2. Refactor the method replacing the calls with native asynchronous variants 'File.ReadAllTextAsync()' and 'File.WriteAllTextAsync()' with 'await'.",
+      "Criteria": [
+        {
+          "Description": "Explains that calling synchronous I/O operations in async methods blocks ThreadPool threads, causing Thread Starvation under high load",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors File System calls using File.ReadAllTextAsync() and File.WriteAllTextAsync() with await",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: MAUI
+    // ------------------------------------------------------------------------
+    {
+      "Name": "MAUI: Memory Leaks in Handlers / Native Events",
+      "Category": "MAUI",
+      "Prompt": "A developer creates a custom control or Handler in .NET MAUI that subscribes to native platform view events:\n\nprotected override void ConnectHandler(PlatformView platformView) {\n    base.ConnectHandler(platformView);\n    platformView.TextChanged += OnNativeTextChanged;\n}\n\nWhen navigating back and destroying the page in MAUI, the Garbage Collector fails to collect the control, and the page remains in memory. Explain the technical reason for the memory leak and rewrite the Handler applying proper cleanup.",
+      "Criteria": [
+        {
+          "Description": "Explains that native event subscriptions maintain Strong References in the platform layer, preventing Garbage Collection",
+          "Weight": 50
+        },
+        {
+          "Description": "Implements event unsubscription (-=) and reference cleanup inside 'DisconnectHandler' or during the 'Unloaded' event",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "MAUI: UI Thread Violation (MainThread)",
+      "Category": "MAUI",
+      "Prompt": "In .NET MAUI, a ViewModel runs a heavy background task and attempts to update a UI-bound ObservableCollection:\n\npublic async Task LoadDataAsync() {\n    await Task.Run(() => {\n        var data = _repository.FetchLargeDataset();\n        UserList.Clear(); // ❌ UI thread exception\n        foreach (var item in data) UserList.Add(item);\n    });\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the UI Thread (Main Thread) restriction on mobile and desktop platforms.\n2. Rewrite the method using the official .NET MAUI API 'MainThread.BeginInvokeOnMainThread' or 'MainThread.InvokeOnMainThreadAsync' to dispatch collection mutations to the main thread.",
+      "Criteria": [
+        {
+          "Description": "Explains the Main UI Thread restriction across mobile and desktop platforms",
+          "Weight": 50
+        },
+        {
+          "Description": "Applies 'MainThread.BeginInvokeOnMainThread' or 'MainThread.InvokeOnMainThreadAsync' explicitly in the code",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Memory
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Memory: LOH Pressure from Temporary Arrays (ArrayPool)",
+      "Category": "Memory",
+      "Prompt": "Analyze this Web API service processing files in 100 KB chunks under thousands of simultaneous requests:\n\npublic async Task ProcessFileStreamAsync(Stream fileStream) {\n    byte[] buffer = new byte[102400]; // ❌ 100 KB allocated per request\n    int bytesRead;\n    while ((bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0) {\n        ProcessChunk(buffer, bytesRead);\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the impact of allocating arrays greater than 85,000 bytes on the Large Object Heap (LOH) and the memory fragmentation it causes in Generation 2 (Gen 2) of the Garbage Collector.\n2. Rewrite the method using 'ArrayPool<byte>.Shared.Rent()' and 'Return()' within a 'try/finally' block to reuse pooled memory.",
+      "Criteria": [
+        {
+          "Description": "Explains that objects larger than 85,000 bytes are allocated on the Large Object Heap (LOH), increasing fragmentation and triggering costly Gen 2 collections",
+          "Weight": 50
+        },
+        {
+          "Description": "Implements ArrayPool<byte>.Shared.Rent() and ensures buffer return with Return() inside a try/finally block",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Memory: RecyclableMemoryStream vs MemoryStream for High Throughput",
+      "Category": "Memory",
+      "Prompt": "Analyze this high-frequency serialization service in a Web API:\n\npublic async Task<byte[]> SerializeAndSendAsync(OrderEvent evt) {\n    using var ms = new MemoryStream(); // ❌ New Heap buffer allocated per invocation\n    await JsonSerializer.SerializeAsync(ms, evt);\n    var bytes = ms.ToArray(); // ❌ Second buffer copy allocated to the Heap\n    await _channel.PublishAsync(bytes);\n    return bytes;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why 'MemoryStream' allocates a new Heap buffer on each call, and how 'ms.ToArray()' creates an extra copy, increasing GC pressure in high-throughput scenarios.\n2. Refactor the service using 'Microsoft.IO.RecyclableMemoryStream' (RecyclableMemoryStreamManager) to reuse pooled Heap buffers and eliminate repetitive allocations.",
+      "Criteria": [
+        {
+          "Description": "Explains that MemoryStream allocates a buffer on each use and ToArray() duplicates memory, increasing GC pressure in high-frequency operations",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors using RecyclableMemoryStreamManager.GetStream() to obtain streams from a reusable pool, eliminating repetitive allocations",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Stack Allocation (stackalloc) vs Heap",
+      "Category": "Memory",
+      "Prompt": "Analyze this method that processes and transforms a 256-byte network packet performing temporary mutations before calculating a checksum:\n\npublic byte ProcessAndChecksum(ReadOnlySpan<byte> payload) {\n    byte[] tempBuffer = new byte[256]; // ❌ Unnecessary Heap allocation\n    payload.Slice(0, 256).CopyTo(tempBuffer);\n    \n    // Local mutation of the copy\n    for (int i = 0; i < tempBuffer.Length; i++) tempBuffer[i] ^= 0xFF;\n    \n    byte checksum = 0;\n    foreach (var b in tempBuffer) checksum ^= b;\n    return checksum;\n}\n\nRewrite the method to eliminate the array allocation on the Heap.\nMANDATORY REQUIREMENT: Declare the temporary working memory using 'stackalloc byte[256]' (or Span<byte> pointing to stackalloc) to perform local mutations strictly on the Stack.",
+      "Criteria": [
+        {
+          "Description": "Declares and initializes the temporary buffer using 'stackalloc' to allocate memory on the Stack",
+          "Weight": 50
+        },
+        {
+          "Description": "Manipulates the Stack buffer via Span<byte> without requiring direct 'unsafe' code blocks",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Memory Leaks
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Memory Leaks via Event Subscription",
+      "Category": "Memory Leaks",
+      "Prompt": "Analyze this structure in a C# system:\npublic class StockTicker {\n    public event EventHandler<decimal> PriceChanged;\n}\npublic class PriceDisplay {\n    public PriceDisplay(StockTicker ticker) {\n        ticker.PriceChanged += OnPriceChanged;\n    }\n    private void OnPriceChanged(object sender, decimal newPrice) {\n        Console.WriteLine($\"New price: {newPrice}\");\n    }\n}\nIf 'StockTicker' is a long-lived Singleton and thousands of 'PriceDisplay' instances are created and destroyed over time, explain why a Memory Leak occurs and rewrite 'PriceDisplay' applying the recommended C# solution (IDisposable or Weak Events).",
+      "Criteria": [
+        {
+          "Description": "Explains that the Singleton publisher holds a Strong Reference to the PriceDisplay instance, preventing its collection by the Garbage Collector",
+          "Weight": 50
+        },
+        {
+          "Description": "Implements the IDisposable interface to unsubscribe from the event (-=) or uses the WeakEventManager / WeakReference pattern",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Migration
+    // ------------------------------------------------------------------------
+    {
+      "Name": ".NET Framework to Modern .NET Migration",
+      "Category": "Migration",
+      "Prompt": "Analyze this legacy .NET Framework 4.8 code running inside a Web API controller:\npublic class UserReportController : ApiController {\n    public HttpResponseMessage GetUserData(string userId) {\n        var client = new HttpWebRequest(); // Or new HttpClient() per request\n        var result = FetchDataFromExternalApiAsync(userId).Result;\n        return Request.CreateResponse(HttpStatusCode.OK, result);\n    }\n    private async Task<string> FetchDataFromExternalApiAsync(string id) {\n        using (var client = new HttpClient()) {\n            var response = await client.GetAsync(\"https://api.internal/users/\" + id);\n            return await response.Content.ReadAsStringAsync();\n        }\n    }\n}\nHighlight the 2 critical architectural dangers when migrating this code to .NET 8/10 (SynchronizationContext deadlocks and HttpClient socket exhaustion) and show the refactored modern version using clean async/await and IHttpClientFactory.",
+      "Criteria": [
+        {
+          "Description": "Identifies the Deadlock risk caused by synchronous blocking (.Result) and recommends async/await end-to-end",
+          "Weight": 50
+        },
+        {
+          "Description": "Identifies Socket Exhaustion caused by creating 'new HttpClient()' per request and proposes IHttpClientFactory",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Minimal APIs & Source Generators
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Minimal API: MapGroup with Endpoint Validation",
+      "Category": "Minimal APIs & Source Generators",
+      "Prompt": "Analyze this API defining multiple CRUD routes for 'products':\n\nvar app = WebApplication.Create(args);\n\napp.MapGet(\"/api/products\", () => GetProducts());\napp.MapGet(\"/api/products/{id}\", (int id) => GetProductById(id));\napp.MapPost(\"/api/products\", (Product p) => CreateProduct(p));\napp.MapPut(\"/api/products/{id}\", (int id, Product p) => UpdateProduct(id, p));\napp.MapDelete(\"/api/products/{id}\", (int id) => DeleteProduct(id));\n\nMANDATORY REQUIREMENTS:\n1. Explain how 'MapGroup' in .NET 10 Minimal APIs reduces prefix duplication and improves route organization.\n2. Refactor using 'var products = app.MapGroup(\"/api/products\")' with FluentValidation or DataAnnotations validation.",
+      "Criteria": [
+        {
+          "Description": "Explains that MapGroup reduces prefix duplication and enables centralized middleware and validation filters",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors using MapGroup and applies .AddEndpointFilter<ValidationFilter>() or equivalent",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Source Generators: Generated Partial Logging Method",
+      "Category": "Minimal APIs & Source Generators",
+      "Prompt": "Analyze this repetitive logging method:\n\npublic void ProcessOrder(Order order) {\n    _logger.LogInformation($\"Processing order {order.Id} for {order.CustomerName} with amount {order.Amount:C}\");\n    // logic\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the '[LoggerMessage]' Source Generator in .NET 10 that eliminates boxing and string interpolation.\n2. Refactor using the generated 'partial' method pattern with '[LoggerMessage(Level = LogLevel.Information, Message = \"...\")]'.",
+      "Criteria": [
+        {
+          "Description": "Explains that [LoggerMessage] generates optimized compile-time code, eliminating string allocations and boxing",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors declaring a partial method with [LoggerMessage] correctly",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Pattern Matching Advanced
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Pattern Matching: 'or' Expressions in Property Patterns",
+      "Category": "Pattern Matching Advanced",
+      "Prompt": "Analyze this code with multiple 'if' statements:\n\nif (user.Role == \"Admin\" || user.Role == \"SuperAdmin\") {\n    if (user.IsActive && user.EmailVerified) {\n        GrantAccess(user);\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Refactor using 'property pattern' with the 'or' combinator in C# 14.\n2. Apply 'if (user is { Role: \"Admin\" or \"SuperAdmin\", IsActive: true, EmailVerified: true })'.",
+      "Criteria": [
+        {
+          "Description": "Uses property pattern with multiple conditions in a single expression",
+          "Weight": 50
+        },
+        {
+          "Description": "Applies 'or' combinator correctly in the Role pattern",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Pattern Matching: List Patterns with Discard",
+      "Category": "Pattern Matching Advanced",
+      "Prompt": "Analyze this manual list validation:\n\nif (args.Length >= 3 && args[0] == \"cmd\" && args[2].StartsWith(\"--\")) {\n    ProcessCommand(args);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain 'List Patterns' in C# 14 (.NET 10) with slice pattern [..].\n2. Refactor using 'if (args is [\"cmd\", _, var flag, ..] && flag.StartsWith(\"--\"))'.",
+      "Criteria": [
+        {
+          "Description": "Explains List Patterns with _ (discard), var (capture), and .. (slice)",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors using pattern matching with [, _, var, ..] correctly",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Performance
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Memory Optimization with Span<T>",
+      "Category": "Performance",
+      "Prompt": "I have this method processing logs formatted as 'YYYY-MM-DD|SEVERITY|MESSAGE':\npublic List<string> Extract(string[] lines) {\n    var list = new List<string>();\n    foreach(var l in lines) {\n        var p = l.Split('|');\n        if(p.Length >= 2) list.Add(p[1]);\n    }\n    return list;\n}\n\nRewrite it in C# using ReadOnlySpan<char> to optimize memory.\nMANDATORY REQUIREMENTS:\n1. Do NOT use .Split(). Use IndexOf / Slice to extract the severity.\n2. Explicitly explain in text how ReadOnlySpan<char> reduces Garbage Collector (GC) pressure by eliminating intermediate array allocations on the Heap during parsing.",
+      "Criteria": [
+        {
+          "Description": "Uses ReadOnlySpan<char> or AsSpan()",
+          "Weight": 35
+        },
+        {
+          "Description": "Completely eliminates .Split() usage by applying manual slicing with IndexOf / Slice",
+          "Weight": 35
+        },
+        {
+          "Description": "Explicitly mentions the reduction of Garbage Collector (GC) pressure",
+          "Weight": 30
+        }
+      ]
+    },
+    {
+      "Name": "Performance: Closure Allocations in Lambdas",
+      "Category": "Performance",
+      "Prompt": "Analyze the following C# code on a performance-critical path:\n\npublic void FilterOrders(List<Order> orders, int minAmount) {\n    int discountThreshold = 100;\n    var filtered = orders.Where(o => o.Amount > minAmount && o.Amount < discountThreshold);\n    ProcessFiltered(filtered);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the impact on the Heap and GC when capturing local variables (closures) inside lambda expressions.\n2. Refactor the code using static lambdas or a direct imperative loop to avoid closure allocations on the Heap.",
+      "Criteria": [
+        {
+          "Description": "Explains that capturing local variables forces the creation of a closure class instance (DisplayClass) on the Heap on each execution",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code avoiding Heap allocations through static lambdas or a direct imperative loop",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Performance: FrozenDictionary<TKey, TValue> for Read-Only Data (.NET 8+)",
+      "Category": "Performance",
+      "Prompt": "Analyze this ISO country code mapping service initialized once at startup and queried millions of times throughout the application lifecycle:\n\npublic class CountryService {\n    private static readonly Dictionary<string, string> _codes = new() {\n        [\"US\"] = \"United States\", [\"MX\"] = \"Mexico\", // ... 250 entries\n    };\n    \n    public string? GetName(string code) => _codes.GetValueOrDefault(code);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the advantages of 'FrozenDictionary<TKey, TValue>' (System.Collections.Frozen, .NET 8+) over 'Dictionary<TKey, TValue>' for immutable, read-heavy collections: memory layout optimization, faster lookups, and zero synchronization overhead.\n2. Refactor the static field using 'FrozenDictionary<string, string>' initialized with '.ToFrozenDictionary()' at startup.",
+      "Criteria": [
+        {
+          "Description": "Explains that FrozenDictionary optimizes internal layout for frequent reads with perfect or near-perfect hashing, outperforming Dictionary for immutable read-only collections",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the static field using FrozenDictionary<string, string> initialized with .ToFrozenDictionary() during application startup",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Performance: Multiple Re-evaluation of IEnumerable",
+      "Category": "Performance",
+      "Prompt": "Analyze the following method in a high-performance application:\n\npublic void ProcessUsers(IEnumerable<User> userSequence) {\n    var activeUsers = userSequence.Where(u => u.IsActive).Select(u => TransformUser(u));\n    \n    if (activeUsers.Any()) {\n        Console.WriteLine($\"Total active: {activeUsers.Count()}\");\n        foreach (var user in activeUsers) {\n            SaveToDatabase(user);\n        }\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the performance trap of Deferred Execution in 'IEnumerable<T>' when evaluated multiple times (.Any(), .Count(), foreach).\n2. Refactor the method to evaluate and iterate the sequence only once, or materialize it properly in memory when appropriate.",
+      "Criteria": [
+        {
+          "Description": "Explains that deferred execution causes the LINQ query pipeline to re-execute from scratch on each invocation (.Any(), .Count(), foreach)",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the logic materializing the collection only once (e.g., ToArray/ToList) or restructuring the flow into a single iteration",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Performance: Stream Parsing with System.IO.Pipelines",
+      "Category": "Performance",
+      "Prompt": "Analyze a parser processing frames from a network Stream by accumulating data in temporary buffers:\n\npublic async Task ReadStreamAsync(Stream stream) {\n    byte[] buffer = new byte[4096];\n    int bytesRead;\n    while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0) {\n        // Continuous array allocations and manual copying to find '\\n' delimiters\n        ProcessBuffer(buffer, bytesRead);\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the advantage of 'System.IO.Pipelines' (PipeReader/PipeWriter) for managing reusable memory buffers ('ReadOnlySequence<byte>') without intermediate Heap allocations or copying.\n2. Show the refactoring using 'PipeReader.Create(stream)', processing the 'ReadResult' with 'PipeReader.ReadAsync()', manipulating the 'ReadOnlySequence<byte>', and advancing the cursor with 'Reader.AdvanceTo()'.",
+      "Criteria": [
+        {
+          "Description": "Explains that System.IO.Pipelines automatically manages buffer memory (ReadOnlySequence), eliminating copying and Heap allocations",
+          "Weight": 50
+        },
+        {
+          "Description": "Implements PipeReader.ReadAsync(), processes ReadOnlySequence<byte>, and frees consumed memory with Reader.AdvanceTo()",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Performance: String Allocations in Logging",
+      "Category": "Performance",
+      "Prompt": "Analyze this method called inside a high-traffic critical loop:\n\npublic void ProcessOrder(Order order) {\n    // Critical loop...\n    _logger.LogInformation($\"Processing order {order.Id} for customer {order.CustomerName} with total {order.Amount:C}\");\n    ExecuteTransaction(order);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why using string interpolation ($”...”) inside 'ILogger' methods allocates 'string' objects on the Heap unnecessarily, even if the 'Information' log level is disabled.\n2. Refactor the code using structured logging with message templates (\"Processing order {OrderId}...\") or source-generated '[LoggerMessage]'.",
+      "Criteria": [
+        {
+          "Description": "Explains that string interpolation ($) evaluates and allocates the string on the Heap before the logger checks the log level",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using structured message templates or the [LoggerMessage] attribute to avoid unnecessary allocations",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Performance: Value Type Boxing and Unboxing",
+      "Category": "Performance",
+      "Prompt": "Analyze the following method processing millions of 2D coordinates on a high-frequency critical path:\n\npublic struct Point {\n    public int X { get; set; }\n    public int Y { get; set; }\n}\n\npublic void ProcessPoints(List<Point> points) {\n    foreach (var p in points) {\n        // Passing struct to an object parameter\n        LogValue(p);\n        \n        // Formatting forcing struct boxing\n        string formatted = string.Format(\"Point: {0}, {1}\", p.X, p.Y);\n    }\n}\n\nprivate void LogValue(object obj) { /* ... */ }\n\nExplain the impact of Boxing and Unboxing on Heap memory and the Garbage Collector (GC).\nMANDATORY REQUIREMENTS:\n1. Explicitly explain how passing a 'struct' to 'object' forces Heap memory allocation (Boxing).\n2. Refactor the method completely eliminating Boxing by using generics ('LogValue<T>(T obj)') and modern string interpolation or ISpanFormattable.",
+      "Criteria": [
+        {
+          "Description": "Explains that Boxing allocates memory on the Heap to wrap a value type (struct) inside a reference object (object), increasing GC pressure",
+          "Weight": 50
+        },
+        {
+          "Description": "Eliminates Boxing by refactoring to generics (T) and direct interpolation or ISpanFormattable",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Performance: ValueTask vs Task for Hot Paths",
+      "Category": "Performance",
+      "Prompt": "Analyze the following in-memory cache method invoked millions of times per second:\n\npublic async Task<string?> GetCachedValueAsync(string key) {\n    if (_cache.TryGetValue(key, out var cached))\n        return cached; // Frequent synchronous path\n    \n    var value = await FetchFromDatabaseAsync(key); // Infrequent asynchronous path\n    _cache[key] = value;\n    return value;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why returning 'Task<T>' on hot paths that frequently complete synchronously creates unnecessary Task object allocations on the Heap, causing GC pressure.\n2. Refactor the method to use 'ValueTask<string?>' when the result completes synchronously (cache hit), avoiding Task object allocation.",
+      "Criteria": [
+        {
+          "Description": "Explains that Task<T> always allocates an object on the Heap even on synchronous completions, whereas ValueTask<T> avoids this allocation on the happy path",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the method returning ValueTask<string?> and directly returning the cached value on the synchronous path without creating a Task object",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "String Concatenation and Heap Pressure",
+      "Category": "Performance",
+      "Prompt": "Analyze the following method generating a plain text report from thousands of records:\npublic string GenerateReport(List<string> dataItems) {\n    string report = \"HEADER\\n\";\n    foreach (var item in dataItems) {\n        report += \"LOG: \" + item.Trim() + \" | STATUS: OK\\n\";\n    }\n    return report;\n}\nExplain the performance and memory allocation issue on the Heap (LOH / GC), and rewrite the method applying the best optimized alternative in C# .NET.",
+      "Criteria": [
+        {
+          "Description": "Explicitly explains System.String immutability and excessive Heap allocations in loops",
+          "Weight": 40
+        },
+        {
+          "Description": "Replaces concatenation (+=) with StringBuilder, ValueStringBuilder, or string.Create",
+          "Weight": 60
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Security & Identity
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Identity: IP-Based Rate Limiting with Middleware",
+      "Category": "Security & Identity",
+      "Prompt": "Implement IP-based rate limiting in ASP.NET Core .NET 10 using native 'AddRateLimiter' middleware.\n\nMANDATORY REQUIREMENTS:\n1. Configure 'builder.Services.AddRateLimiter' with a FixedWindowLimiter policy (10 req/min).\n2. Apply '[EnableRateLimiting(\"fixed\")]' on an endpoint.",
+      "Criteria": [
+        {
+          "Description": "Configures AddRateLimiter with FixedWindowLimiter correctly (PermitLimit, Window)",
+          "Weight": 50
+        },
+        {
+          "Description": "Applies [EnableRateLimiting] or RequireRateLimiting on the endpoint",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Security: HSTS with Preload in Production",
+      "Category": "Security & Identity",
+      "Prompt": "Analyze this HSTS configuration:\n\napp.UseHsts();\n\nMANDATORY REQUIREMENTS:\n1. Explain what HSTS Preload is and its requirements (max-age >= 31536000, includeSubDomains).\n2. Configure 'builder.Services.AddHsts(options => ...)' for Preload in production.",
+      "Criteria": [
+        {
+          "Description": "Explains HSTS Preload and requirements (1-year max-age, includeSubDomains, preload directive)",
+          "Weight": 50
+        },
+        {
+          "Description": "Configures options.MaxAge, options.IncludeSubDomains, and options.Preload correctly",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: SignalR
+    // ------------------------------------------------------------------------
+    {
+      "Name": "SignalR: Groups, Reconnection, and Back-Pressure with Channels",
+      "Category": "SignalR",
+      "Prompt": "A SignalR Hub broadcasts 10,000 events per second to all connected clients without flow control:\n\npublic class LiveFeedHub : Hub {\n    public async Task Subscribe(string topic) {\n        await Groups.AddToGroupAsync(Context.ConnectionId, topic);\n    }\n}\n\n// Broadcaster (background service):\nwhile (!ct.IsCancellationRequested) {\n    var evt = await GetNextEventAsync();\n    await _hubContext.Clients.Group(evt.Topic).SendAsync(\"OnEvent\", evt); // ❌ No back-pressure\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the back-pressure issue: sending events faster than WebSocket clients can consume them can overwhelm SignalR internal buffers and cause dropped connections.\n2. Refactor the broadcaster using a 'Channel<LiveEvent>' as a buffer: the producer writes via 'WriteAsync' and the consumer reads via 'ReadAllAsync', bounding throughput with 'BoundedChannelOptions { FullMode = BoundedChannelFullMode.DropOldest }'.",
+      "Criteria": [
+        {
+          "Description": "Explains the back-pressure issue in SignalR: sending data faster than WebSocket clients consume saturates buffers and causes client drops",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the broadcaster using Channel<T> with BoundedChannelOptions and FullMode = DropOldest to manage back-pressure",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: SQL & Dapper
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Dapper: Implicit Type Conversion (VARCHAR vs DbString)",
+      "Category": "SQL & Dapper",
+      "Prompt": "Analyze the following Dapper query in C# targeting a SQL Server table where 'ProductCode' is defined as 'VARCHAR(50)' with a non-clustered index:\n\npublic async Task<Product> GetProductAsync(IDbConnection db, string code) {\n    return await db.QueryFirstOrDefaultAsync<Product>(\n        \"SELECT Id, ProductCode, Name FROM Products WHERE ProductCode = @code\",\n        new { code }\n    );\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why Dapper maps C# 'string' types by default to 'NVARCHAR' (Unicode), forcing SQL Server to perform an implicit conversion (CONVERT_IMPLICIT) on the VARCHAR column, negating Index Seek capability.\n2. Refactor the parameter in Dapper using 'DbString' with 'IsAnsi = true' (or 'AnsiString') to explicitly force VARCHAR and preserve index performance.",
+      "Criteria": [
+        {
+          "Description": "Explains that Dapper sends strings as NVARCHAR by default and that implicit conversion from VARCHAR to NVARCHAR in SQL Server invalidates Index Seek usage",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the parameter using 'new DbString { Value = code, IsAnsi = true }' to explicitly send a VARCHAR type to SQL Server",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Dapper: Memory Buffering vs Unbuffered Streaming (buffered: false)",
+      "Category": "SQL & Dapper",
+      "Prompt": "Analyze this C# Dapper method processing a massive log export report:\n\npublic async Task<List<LogEntry>> ExportLogsAsync(IDbConnection db, DateTime startDate) {\n    // ❌ Default buffered: true loading of millions of records\n    var logs = await db.QueryAsync<LogEntry>(\"SELECT Id, Timestamp, Message, StackTrace FROM SystemLogs WHERE Timestamp >= @startDate\", new { startDate });\n    return logs.ToList();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why the default 'buffered: true' parameter in Dapper loads the entire result set into RAM before returning, risking an OutOfMemoryException on large tables.\n2. Refactor the query passing 'buffered: false' to stream rows row-by-row through an 'IEnumerable' without buffering the entire dataset in memory.",
+      "Criteria": [
+        {
+          "Description": "Explains that 'buffered: true' (default) fetches the entire DataReader into RAM before returning, creating an OutOfMemoryException risk",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the call passing 'buffered: false' to process the data stream line-by-line",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Dapper: N+1 Anti-Pattern and Multi-Mapping Usage",
+      "Category": "SQL & Dapper",
+      "Prompt": "Analyze the following code fetching customers and their orders using Dapper:\n\npublic async Task<List<CustomerDto>> GetCustomersWithOrdersAsync(IDbConnection db) {\n    var customers = (await db.QueryAsync<CustomerDto>(\"SELECT Id, Name FROM Customers\")).ToList();\n    \n    // ❌ N+1 Anti-Pattern: SQL query executed inside a loop for each customer\n    foreach (var customer in customers) {\n        var orders = await db.QueryAsync<OrderDto>(\"SELECT Id, Amount FROM Orders WHERE CustomerId = @Id\", new { Id = customer.Id });\n        customer.Orders = orders.ToList();\n    }\n    return customers;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the catastrophic impact on latency and network/database saturation caused by the N+1 queries problem.\n2. Refactor the code to a SINGLE SQL query with 'JOIN' using Dapper's Multi-Mapping functionality ('db.QueryAsync<CustomerDto, OrderDto, CustomerDto>(...)') to map the relationship in memory in a single round-trip.",
+      "Criteria": [
+        {
+          "Description": "Explains that the N+1 anti-pattern executes N+1 network round-trips to the database, degrading system latency and scalability",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using a single JOIN query with Dapper Multi-Mapping (QueryAsync<T1, T2, TReturn>) and splitOn",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Dapper: String Interpolation and Plan Cache Pollution",
+      "Category": "SQL & Dapper",
+      "Prompt": "Analyze the following code in a C# microservice using Dapper:\n\npublic async Task<IEnumerable<Customer>> GetCustomersByCityAsync(IDbConnection db, string city) {\n    // ❌ Direct string interpolation in SQL query\n    string sql = $\"SELECT Id, Name, City FROM Customers WHERE City = '{city}'\";\n    return await db.QueryAsync<Customer>(sql);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the two critical issues caused by direct interpolation in Dapper: SQL Injection vulnerability and Query Plan Cache Pollution in SQL Server.\n2. Refactor the query using Dapper anonymous parameterization ('SELECT ... WHERE City = @City', new { City = city }) to guarantee security and execution plan reuse.",
+      "Criteria": [
+        {
+          "Description": "Explains that direct interpolation exposes SQL Injection and prevents execution plan reuse, generating Plan Cache Pollution in SQL Server",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the query using Dapper's anonymous parameter object (@City, new { City = city })",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: System.Text.Json Performance
+    // ------------------------------------------------------------------------
+    {
+      "Name": "System.Text.Json: Source Generator for NativeAOT",
+      "Category": "System.Text.Json Performance",
+      "Prompt": "Analyze this serialization code in a NativeAOT application:\n\nvar json = JsonSerializer.Serialize(user);\n\nMANDATORY REQUIREMENTS:\n1. Explain the runtime reflection problem with JsonSerializer without a Source Generator in NativeAOT.\n2. Implement '[JsonSerializable(typeof(User))]' with a generated partial 'JsonSerializerContext'.",
+      "Criteria": [
+        {
+          "Description": "Explains that NativeAOT strips reflection metadata, causing JsonSerializer to fail without a Source Generator",
+          "Weight": 50
+        },
+        {
+          "Description": "Declares [JsonSerializable] and inherits from JsonSerializerContext correctly",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "System.Text.Json: Utf8JsonReader for Zero-Allocation Parsing",
+      "Category": "System.Text.Json Performance",
+      "Prompt": "Analyze this JSON parsing from a Stream:\n\nvar users = await JsonSerializer.DeserializeAsync<List<User>>(stream);\n\nMANDATORY REQUIREMENTS:\n1. Explain the advantage of 'Utf8JsonReader' for incremental parsing without string allocations.\n2. Show how to parse token-by-token with 'Utf8JsonReader' over 'ReadOnlySpan<byte>'.",
+      "Criteria": [
+        {
+          "Description": "Explains that Utf8JsonReader operates over spans without allocating intermediate strings on the Heap",
+          "Weight": 50
+        },
+        {
+          "Description": "Shows a loop with reader.Read() and switch over TokenType to parse properties",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: T-SQL
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Concurrent UPSERT in SQL Server",
+      "Category": "T-SQL",
+      "Prompt": "Write a T-SQL query for SQL Server that performs an UPSERT on the 'Inventory (ProductId PK, Stock)' table exposed to hundreds of concurrent requests.\nMANDATORY REQUIREMENT: Use MERGE syntax and explicitly include the WITH (HOLDLOCK) table hint or SERIALIZABLE transaction to prevent race conditions and primary key deadlocks under high concurrency.",
+      "Criteria": [
+        {
+          "Description": "Uses the T-SQL MERGE statement",
+          "Weight": 40
+        },
+        {
+          "Description": "Explicitly includes the mandatory WITH (HOLDLOCK) hint or SERIALIZABLE isolation level",
+          "Weight": 60
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: T-SQL Performance
+    // ------------------------------------------------------------------------
+    {
+      "Name": "T-SQL: Non-Sargable Predicates and Index Scanning",
+      "Category": "T-SQL Performance",
+      "Prompt": "Analyze the following T-SQL query executed against an 'Orders' table with a non-clustered index on 'OrderDate':\n\nSELECT OrderId, CustomerId, TotalAmount\nFROM Orders\nWHERE YEAR(OrderDate) = 2026 AND MONTH(OrderDate) = 8;\n\nMANDATORY REQUIREMENTS:\n1. Explain why applying scalar functions (YEAR, MONTH, UPPER, etc.) on indexed columns in the WHERE clause makes the query Non-Sargable, forcing a full Index Scan instead of a targeted Index Seek.\n2. Rewrite the T-SQL query in Sargable format using an explicit date range ('WHERE OrderDate >= ... AND OrderDate < ...') allowing the query optimizer to perform an Index Seek.",
+      "Criteria": [
+        {
+          "Description": "Explains that applying scalar functions to columns in the WHERE clause disables the optimizer's ability to perform an Index Seek (Non-Sargable)",
+          "Weight": 50
+        },
+        {
+          "Description": "Rewrites the T-SQL query using explicit date ranges (OrderDate >= '2026-08-01' AND OrderDate < '2026-09-01'), enabling Index Seek",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "T-SQL: Window Functions vs Correlated Subqueries",
+      "Category": "T-SQL Performance",
+      "Prompt": "Analyze the following T-SQL query calculating regional sales rankings using correlated subqueries:\n\nSELECT\n    s.SalespersonId,\n    s.Region,\n    s.TotalSales,\n    (SELECT COUNT(*) + 1 FROM Sales s2\n     WHERE s2.Region = s.Region AND s2.TotalSales > s.TotalSales) AS Rank\nFROM Sales s;\n\nMANDATORY REQUIREMENTS:\n1. Explain why the correlated subquery executes N table scans (one per outer row) with O(N²) complexity, exponentially degrading performance as data volume grows.\n2. Rewrite the query using the window function 'RANK() OVER (PARTITION BY Region ORDER BY TotalSales DESC)' to compute the ranking in a single scan with O(N log N) complexity.",
+      "Criteria": [
+        {
+          "Description": "Explains that the correlated subquery executes a scan for each row of the outer table, resulting in O(N²) complexity",
+          "Weight": 50
+        },
+        {
+          "Description": "Rewrites the query using RANK() OVER (PARTITION BY ... ORDER BY ...) to compute rankings in a single table scan",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Testing & Mocking
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Testing: Time Abstraction with TimeProvider (.NET 10)",
+      "Category": "Testing & Mocking",
+      "Prompt": "Refactor this code to make it testable:\n\npublic bool IsExpired(DateTime expirationDate) {\n    return DateTime.UtcNow > expirationDate;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the 'TimeProvider' class in .NET 10 for time abstraction and injection.\n2. Refactor injecting 'TimeProvider' and using 'timeProvider.GetUtcNow()'.",
+      "Criteria": [
+        {
+          "Description": "Explains that TimeProvider abstracts DateTime.UtcNow for unit testing",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors injecting TimeProvider in constructor and using GetUtcNow()",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Testing: WebApplicationFactory<T> with Configuration Override",
+      "Category": "Testing & Mocking",
+      "Prompt": "Create an integration test that replaces 'IEmailService' with a mock in WebApplicationFactory.\n\nMANDATORY REQUIREMENTS:\n1. Inherit from 'WebApplicationFactory<Program>' and override 'ConfigureWebHost'.\n2. Replace the real service using 'services.RemoveAll<IEmailService>(); services.AddSingleton<IEmailService>(mockEmail);'.",
+      "Criteria": [
+        {
+          "Description": "Inherits from WebApplicationFactory<Program> and overrides ConfigureWebHost",
+          "Weight": 50
+        },
+        {
+          "Description": "Uses services.RemoveAll and AddSingleton to replace the dependency",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: ValueTask & IAsyncEnumerable
+    // ------------------------------------------------------------------------
+    {
+      "Name": "IAsyncEnumerable: Data Streaming from DB",
+      "Category": "ValueTask & IAsyncEnumerable",
+      "Prompt": "Refactor this method that loads EVERYTHING into memory:\n\npublic async Task<List<Order>> GetOrdersAsync() {\n    return await _db.Orders.ToListAsync();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the issue of loading millions of records into memory with ToListAsync.\n2. Refactor using 'IAsyncEnumerable<Order>' with 'await foreach' for streaming.",
+      "Criteria": [
+        {
+          "Description": "Explains that ToListAsync materializes the entire sequence in memory at once",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors with 'async IAsyncEnumerable<Order>' and 'yield return' or AsAsyncEnumerable()",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "ValueTask: When NOT to Use ValueTask<T>",
+      "Category": "ValueTask & IAsyncEnumerable",
+      "Prompt": "Analyze this method:\n\npublic async ValueTask<User> GetUserAsync(int id) {\n    var user = await _cache.GetAsync<User>(id);\n    if (user != null) return user;\n    return await _db.Users.FindAsync(id);\n}\n\nMANDATORY REQUIREMENTS:\n1. Identify the anti-pattern: multiple 'await' statements on a ValueTask (violating the single-consumption rule).\n2. Explain when NOT to use ValueTask (multiple awaits, storing in fields).",
+      "Criteria": [
+        {
+          "Description": "Identifies that a ValueTask must NOT be awaited multiple times (single-consumption rule)",
+          "Weight": 50
+        },
+        {
+          "Description": "Recommends using Task<T> or refactoring flow into a single 'return await'",
+          "Weight": 50
+        }
+      ]
+    },
+
+    // ------------------------------------------------------------------------
+    // CATEGORY: Web API
+    // ------------------------------------------------------------------------
+    {
+      "Name": "Validation Interceptor in Minimal APIs",
+      "Category": "Web API",
+      "Prompt": "Analyze the following validation filter in a Minimal API:\n\napp.MapPost(\"/orders\", async (OrderDto dto) => TypedResults.Ok(dto))\n   .AddEndpointFilter(async (context, next) => {\n       var dto = context.GetArgument<OrderDto>(0);\n       var result = await next(context);\n       if (dto.Amount <= 0) return TypedResults.BadRequest(\"Invalid amount\");\n       return result;\n   });\n\nMANDATORY REQUIREMENTS:\n1. Explain why calling 'await next(context)' BEFORE validating the DTO is a critical flaw in filter execution flow.\n2. Refactor the filter to perform validation BEFORE calling 'await next(context)', returning 'TypedResults.BadRequest' if Amount is <= 0.",
+      "Criteria": [
+        {
+          "Description": "Explains that calling 'await next(context)' first executes the endpoint handler before validating data, wasting server resources",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the filter validating arguments BEFORE calling await next(context), returning TypedResults.BadRequest or ValidationProblem if invalid",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Web API: Exception Handling with IExceptionHandler",
+      "Category": "Web API",
+      "Prompt": "In ASP.NET Core (.NET 8/10), refactor global exception handling by creating a custom Handler implementing 'IExceptionHandler'.\nMANDATORY REQUIREMENTS:\n1. In the Handler class, inject 'IProblemDetailsService' via constructor and invoke 'TryWriteAsync' inside 'TryHandleAsync'.\n2. In Program.cs, show the clean official setup:\n   - 'builder.Services.AddExceptionHandler<CustomExceptionHandler>();'\n   - 'builder.Services.AddProblemDetails();'\n   - 'app.UseExceptionHandler();' (strictly the clean call without manual lambdas).",
+      "Criteria": [
+        {
+          "Description": "Injects 'IProblemDetailsService' via constructor and invokes TryWriteAsync/WriteAsync inside TryHandleAsync",
+          "Weight": 50
+        },
+        {
+          "Description": "Shows Program.cs configuration with AddExceptionHandler, AddProblemDetails, and clean activation with 'app.UseExceptionHandler()'",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Web API: Native Rate Limiting with RateLimiter (.NET 7+)",
+      "Category": "Web API",
+      "Prompt": "A team protects their Minimal API endpoints using third-party rate limiting middleware. They need to migrate to the native .NET 7+ system.\n\nMANDATORY REQUIREMENTS:\n1. Show Program.cs configuration using 'builder.Services.AddRateLimiter' with a Fixed Window policy: max 100 requests per 10 seconds, rejecting with HTTP 429.\n2. Apply the policy to the API route group with '.RequireRateLimiting(\"fixed\")' and configure rejection via 'options.OnRejected' returning StatusCodes.Status429TooManyRequests.",
+      "Criteria": [
+        {
+          "Description": "Correctly configures AddRateLimiter with AddFixedWindowLimiter specifying PermitLimit, Window, and QueueProcessingOrder in Program.cs",
+          "Weight": 50
+        },
+        {
+          "Description": "Applies the policy to endpoint/group with RequireRateLimiting and configures OnRejected to return HTTP 429",
+          "Weight": 50
+        }
+      ]
+    }
+  ]
+}

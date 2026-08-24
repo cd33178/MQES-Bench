@@ -1,0 +1,211 @@
+{
+  "Name": "Async, Concurrency, Multithreading & Channels Suite",
+  "DefaultSystemPrompt": "You are a Principal .NET Systems Architect expert in asynchronous programming (TAP), CLR Task state machines, thread synchronization, ThreadPool scheduler internals, Parallel.ForEachAsync, and System.Threading.Channels.\n1. Provide non-blocking, thread-safe, production-ready C# code.\n2. Address deadlocks, SynchronizationContext hopping, thread starvation, back-pressure, and exception propagation explicitly.",
+  "DefaultUserPromptSuffix": "MANDATORY OUTPUT CONSTRAINTS:\n1. Wrap code in ```csharp ... ``` blocks.\n2. Ensure all asynchronous methods handle cancellation tokens and avoid async void or sync-over-async blocking.",
+  "DefaultJudgeSystemPrompt": "You are a strict technical evaluation judge for .NET Asynchronous programming and Concurrency patterns.\n\nCRITICAL EVALUATION GUIDELINES:\n1. Asynchronous Safety:\n   - Strictly penalize 'async void' outside event handlers and synchronous blocking (.Result, .Wait()).\n   - Verify correct use of 'Parallel.ForEachAsync' for parallel async iteration (penalizing Parallel.ForEach with async lambdas).\n   - Acknowledge 'ValueTask' single-consumption rules.\n2. Producer-Consumer & Synchronization:\n   - Verify 'System.Threading.Channels' with WriteAsync / ReadAllAsync for non-blocking message queues.\n   - Ensure semaphore releases and lock releases are guarded by try/finally.\n3. Output Formatting:\n   - Output your decision on the very first line as:\n   VERDICT: PASS\n   or\n   VERDICT: FAIL\n\n   Followed by a brief one-sentence reason.",
+  "Tests": [
+    {
+      "Name": "Trap: Async Void in Task Constructor",
+      "Category": "Adversarial - Async",
+      "Prompt": "Analyze the following C# code:\n\npublic void StartProcessing() {\n    var task = new Task(async () => {\n        await Task.Delay(1000);\n        SaveToDatabase();\n    });\n    task.Start();\n    task.Wait();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why SaveToDatabase() executes after task.Wait() finishes and what problem arises when using async inside the Task constructor.\n2. Refactor the method to use async/await properly without 'new Task', 'Start', or 'Wait'.",
+      "Criteria": [
+        {
+          "Description": "Explains that the async lambda is converted to 'async void' due to the Task(Action) overload and that the outer Task completes at the first await",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the method to an asynchronous 'async Task' signature, eliminating 'new Task', 'Start', and 'Wait' in the final solution",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Async Concurrency & Race Conditions",
+      "Category": "C# Core",
+      "Prompt": "Analyze this C# Singleton code processing concurrent tasks:\n\npublic class WorkerService {\n    private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(5);\n    private readonly List<string> _results = new List<string>();\n    public async Task ProcessItemsAsync(List<string> items) {\n        var tasks = items.Select(async item => {\n            _semaphore.Wait();\n            var processed = await TransformAsync(item);\n            _results.Add(processed);\n            _semaphore.Release();\n        });\n        Task.WaitAll(tasks.ToArray());\n    }\n    private async Task<string> TransformAsync(string input) => await Task.FromResult(input.ToUpper());\n}\n\nMANDATORY REQUIREMENTS:\nExplicitly mention the 4 errors and their solutions in the text:\n1. Replace 'Task.WaitAll' with 'Task.WhenAll'.\n2. Replace 'Wait()' with 'WaitAsync()' on the semaphore.\n3. Protect the non-thread-safe 'List<T>' (using lock or ConcurrentBag).\n4. Wrap 'Release()' inside a 'try/finally' block.",
+      "Criteria": [
+        {
+          "Description": "Identifies replacing Task.WaitAll with Task.WhenAll",
+          "Weight": 25
+        },
+        {
+          "Description": "Explicitly identifies using WaitAsync() instead of Wait()",
+          "Weight": 25
+        },
+        {
+          "Description": "Identifies that List<T> is not thread-safe (recommends ConcurrentBag or Lock)",
+          "Weight": 25
+        },
+        {
+          "Description": "Uses try/finally to guarantee semaphore Release()",
+          "Weight": 25
+        }
+      ]
+    },
+    {
+      "Name": "Async: Inadvertent Fire-and-Forget due to Missing await",
+      "Category": "Async & Concurrency",
+      "Prompt": "Analyze the following order service method:\n\npublic async Task ProcessOrderAsync(Order order) {\n    AuditLogAsync(order.Id); // Method returning Task\n    await ShipOrderAsync(order);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the consequences of invoking 'AuditLogAsync' without the 'await' keyword (race conditions, lost exceptions).\n2. Refactor the code to ensure sequential execution or proper handling for intentional concurrent execution.",
+      "Criteria": [
+        {
+          "Description": "Explains that invoking a Task-returning method without 'await' runs the task in the background without synchronization, causing race conditions and lost exceptions",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code by adding 'await' to the asynchronous call or coordinating it via Task.WhenAll for concurrent execution",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Async: Misuse of Task.Run Wrapping Naturally Asynchronous Operations",
+      "Category": "Async & Concurrency",
+      "Prompt": "Analyze the following repository method querying an external HTTP service:\n\npublic async Task<string> FetchUserDataAsync(string userId) {\n    return await Task.Run(async () => {\n        using var client = new HttpClient();\n        var response = await client.GetAsync($\"https://api.example.com/users/{userId}\");\n        return await response.Content.ReadAsStringAsync();\n    });\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why wrapping asynchronous I/O calls inside 'Task.Run' is an anti-pattern in .NET and how it negatively affects the ThreadPool.\n2. Refactor the method by removing the unnecessary wrapper and maintaining a clean asynchronous flow.",
+      "Criteria": [
+        {
+          "Description": "Explains that wrapping asynchronous I/O operations in Task.Run wastes a ThreadPool thread unnecessarily and adds state machine overhead without providing real parallelism",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors by removing Task.Run and directly awaiting the asynchronous I/O calls end-to-end",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Async: Mixing Parallel.ForEach with Async Lambdas",
+      "Category": "Async & Concurrency",
+      "Prompt": "Analyze the following method attempting to process multiple URLs asynchronously:\n\npublic void DownloadAll(List<string> urls) {\n    Parallel.ForEach(urls, async url => {\n        await DownloadFileAsync(url);\n    });\n    Console.WriteLine(\"Downloads completed.\");\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why 'Parallel.ForEach' does not await asynchronous tasks and what happens internally with unhandled exceptions.\n2. Refactor the code using the appropriate .NET 6+ API for parallel asynchronous iteration.",
+      "Criteria": [
+        {
+          "Description": "Explains that Parallel.ForEach accepts Action<T>, converting the async lambda into 'async void', causing the loop to return before tasks complete and silencing/crashing on exceptions",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using Parallel.ForEachAsync with await to coordinate parallel asynchronous execution correctly",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Async: Use of async void in Business Logic Methods",
+      "Category": "Async & Concurrency",
+      "Prompt": "Analyze the following processing service in a C# application:\n\npublic class PaymentProcessor {\n    public async void ProcessPayment(PaymentRequest request) {\n        await _gateway.ChargeAsync(request);\n        await _db.SaveReceiptAsync(request);\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the risks of using 'async void' outside of Event Handlers, detailing what happens with unhandled exceptions and the caller's inability to await completion.\n2. Refactor the signature and method according to asynchronous best practices.",
+      "Criteria": [
+        {
+          "Description": "Explains that async void prevents callers from using await, makes catching exceptions with try/catch impossible, and can crash the process on unhandled exceptions",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the method return type to 'async Task' to allow safe exception propagation and proper awaiting",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Async: Using ConfigureAwait(false) in Class Libraries",
+      "Category": "Async & Concurrency",
+      "Prompt": "Analyze the following code within a reusable class library (NuGet / Class Library) consumed by WPF, MAUI, and ASP.NET applications:\n\npublic async Task<UserData> LoadUserAsync(int id) {\n    var json = await _client.GetStringAsync($\"/users/{id}\");\n    return JsonSerializer.Deserialize<UserData>(json);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why using 'ConfigureAwait(false)' is a best practice in class library code and what problems it avoids when consumed by UI applications with a SynchronizationContext.\n2. Refactor the query by adding 'ConfigureAwait(false)'.",
+      "Criteria": [
+        {
+          "Description": "Explains the role of ConfigureAwait(false) in preventing SynchronizationContext capture in class libraries, avoiding unnecessary UI thread hops and deadlocks",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the asynchronous call by adding .ConfigureAwait(false) along the library task chain",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Concurrency: Misuse of Task.Run for Heavy CPU-Bound Work vs Parallel.For",
+      "Category": "Concurrency",
+      "Prompt": "Analyze the following CPU-intensive numerical algorithm processing an array of 10,000,000 items:\n\npublic async Task ProcessHeavyMatrixAsync(double[] data) {\n    var tasks = new List<Task>();\n    for (int i = 0; i < data.Length; i++) {\n        int index = i;\n        tasks.Add(Task.Run(() => {\n            data[index] = Math.Sin(data[index]) * Math.Cos(data[index]);\n        }));\n    }\n    await Task.WhenAll(tasks);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the performance collapse caused by Heap Allocation Overhead of millions of 'Task' objects and ThreadPool context switching saturation when using 'Task.Run' in a fine-grained loop for CPU-bound tasks.\n2. Refactor the method using 'Parallel.For' or 'Parallel.ForEach' (synchronous or partitioned) to distribute work efficiently across CPU cores with zero Task allocation overhead on the Heap.",
+      "Criteria": [
+        {
+          "Description": "Explains that spawning millions of Tasks via Task.Run in a loop allocates massive objects on the Heap and saturates the ThreadPool scheduler through context switching overhead",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using Parallel.For or Parallel.ForEach to parallelize CPU-bound calculations using efficient CPU core partitioning",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Concurrency: Parallel.ForEach in I/O Operations (Thread Starvation)",
+      "Category": "Concurrency",
+      "Prompt": "Analyze the following code used to download 500 PDF reports:\n\nParallel.ForEach(pdfUrls, url => {\n    using var client = new HttpClient();\n    var data = client.GetByteArrayAsync(url).Result;\n    SaveToDisk(url, data);\n});\n\nMANDATORY REQUIREMENTS:\n1. Explain the difference between CPU-Bound and I/O-Bound workloads, and why 'Parallel.ForEach' causes ThreadPool thread starvation in network operations.\n2. Refactor the code using the 'Parallel.ForEachAsync' API with 'ParallelOptions.MaxDegreeOfParallelism = 10' and asynchronous calls with await.",
+      "Criteria": [
+        {
+          "Description": "Explains the difference between CPU-Bound and I/O-Bound tasks, highlighting that Parallel.ForEach blocks ThreadPool threads waiting on network I/O instead of yielding",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using Parallel.ForEachAsync with ParallelOptions { MaxDegreeOfParallelism = 10 } and asynchronous await calls",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Concurrency: Parallel.ForEachAsync vs Task.WhenAll for I/O Throttling",
+      "Category": "Concurrency",
+      "Prompt": "Analyze this C# function that processes a list of 1,000 IDs by sending requests to a REST API with a rate limit of 10 simultaneous requests:\n\npublic async Task ProcessOrdersAsync(List<int> orderIds, HttpClient client) {\n    var tasks = orderIds.Select(id => SendApiRequestAsync(client, id));\n    await Task.WhenAll(tasks);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the risks of using 'Task.WhenAll' without throttling on I/O operations (socket exhaustion, memory saturation, and HTTP 429 Too Many Requests).\n2. Refactor the method showing the modern solution using 'Parallel.ForEachAsync' with 'ParallelOptions.MaxDegreeOfParallelism = 10' for non-blocking asynchronous I/O with strict concurrency control.",
+      "Criteria": [
+        {
+          "Description": "Explains that unthrottled Task.WhenAll causes memory spikes, socket exhaustion, and HTTP 429 errors due to lack of concurrency control",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code using Parallel.ForEachAsync with ParallelOptions { MaxDegreeOfParallelism = 10 } and asynchronous await calls",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Concurrency: PLINQ (Parallel LINQ) for In-Memory Batch Processing",
+      "Category": "Concurrency",
+      "Prompt": "Analyze the following method performing complex mathematical transformations and filtering over a list of 5,000,000 in-memory objects:\n\npublic List<ProcessedRecord> ProcessData(List<RawRecord> records) {\n    return records\n        .Where(r => r.IsValid)\n        .Select(r => ComputeComplexHashes(r))\n        .ToList();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain when it is appropriate to use Parallel LINQ (PLINQ) with '.AsParallel()' to utilize all logical CPU cores for large in-memory collections (CPU-Bound), and why it should NOT be used if invoked methods perform blocking I/O (database or network).\n2. Refactor the query using '.AsParallel()', preserving or omitting order as appropriate ('.AsOrdered()'), and controlling concurrency with '.WithDegreeOfParallelism()'.",
+      "Criteria": [
+        {
+          "Description": "Explains that PLINQ (.AsParallel) partitions massive in-memory collections across CPU cores for CPU-bound tasks, but should not be used for blocking I/O operations",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the LINQ query by adding .AsParallel() and .WithDegreeOfParallelism() (or .AsOrdered() if applicable) for parallel in-memory processing",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Concurrency: Producer-Consumer Pattern with Channels",
+      "Category": "Concurrency",
+      "Prompt": "Analyze the following background queue implementation:\n\npublic class WorkQueue {\n    private readonly BlockingCollection<WorkItem> _queue = new();\n    \n    public void Enqueue(WorkItem item) => _queue.Add(item);\n    \n    public void ProcessQueue() {\n        foreach (var item in _queue.GetConsumingEnumerable()) {\n            ProcessItem(item);\n        }\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why 'System.Threading.Channels' (Channel<T>) is superior for asynchronous scenarios compared to 'BlockingCollection<T>', which blocks ThreadPool threads synchronously on '.Take()' or 'GetConsumingEnumerable()'.\n2. Refactor the code using 'Channel.CreateUnbounded<WorkItem>()' (or Bounded), writing with 'Writer.WriteAsync()' and reading asynchronously in a non-blocking manner with 'Reader.ReadAllAsync()'.",
+      "Criteria": [
+        {
+          "Description": "Explains that System.Threading.Channels is designed for async/await without blocking ThreadPool threads, unlike BlockingCollection",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors Producer-Consumer communication using Channel.CreateUnbounded/Bounded, Writer, and Reader.ReadAllAsync()",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "ValueTask: When NOT to Use ValueTask<T>",
+      "Category": "ValueTask & IAsyncEnumerable",
+      "Prompt": "Analyze this method:\n\npublic async ValueTask<User> GetUserAsync(int id) {\n    var user = await _cache.GetAsync<User>(id);\n    if (user != null) return user;\n    return await _db.Users.FindAsync(id);\n}\n\nMANDATORY REQUIREMENTS:\n1. Identify the anti-pattern: multiple 'await' statements on a ValueTask (violating the single-consumption rule).\n2. Explain when NOT to use ValueTask (multiple awaits, storing in fields).",
+      "Criteria": [
+        {
+          "Description": "Identifies that a ValueTask must NOT be awaited multiple times (single-consumption rule)",
+          "Weight": 50
+        },
+        {
+          "Description": "Recommends using Task<T> or refactoring flow into a single 'return await'",
+          "Weight": 50
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "Name": "Blazor Server/SSR & .NET MAUI User Interface Suite",
+  "DefaultSystemPrompt": "You are a Principal .NET UI Architect expert in Blazor Server, Static SSR, Streaming Rendering, and .NET MAUI cross-platform application design.\n1. Provide production-ready, memory-leak-free UI components and view models.\n2. Address event subscription lifecycles, Main UI thread synchronization, and Blazor component state dispatching explicitly.",
+  "DefaultUserPromptSuffix": "MANDATORY OUTPUT CONSTRAINTS:\n1. Wrap code in ```csharp ... ``` or ```razor ... ``` blocks.\n2. Ensure proper cleanup (IDisposable, DisconnectHandler) and UI thread dispatching are demonstrated.",
+  "DefaultJudgeSystemPrompt": "You are a strict technical evaluation judge for Blazor and .NET MAUI.\n\nCRITICAL EVALUATION GUIDELINES:\n1. Blazor Components:\n   - Verify event unsubscription ('-=') inside 'Dispose()' when injecting long-lived Singleton state services.\n   - Acknowledge '@attribute [StreamRendering]' in Static SSR to stream asynchronous data chunks.\n   - Ensure 'EventCallback' is used instead of 'Action' to automatically trigger 'StateHasChanged()'.\n2. .NET MAUI Lifecycle:\n   - Verify that native platform events are unsubscribed in 'DisconnectHandler' or 'Unloaded'.\n   - Ensure UI bound collections are updated strictly via 'MainThread.BeginInvokeOnMainThread' or 'MainThread.InvokeOnMainThreadAsync'.\n3. Output Formatting:\n   - Output your decision on the very first line as:\n   VERDICT: PASS\n   or\n   VERDICT: FAIL\n\n   Followed by a brief one-sentence reason.",
+  "Tests": [
+    {
+      "Name": "Blazor: Global State Memory Leak (IDisposable)",
+      "Category": "Blazor",
+      "Prompt": "A Blazor component (.razor) subscribes to an event on a Singleton 'AppState' service:\n\n@inject AppState State\n@code {\n    protected override void OnInitialized() {\n        State.OnBalanceChanged += () => InvokeAsync(StateHasChanged);\n    }\n}\n\nMANDATORY REQUIREMENTS:\nExplain the root cause of the Memory Leak based on object Lifetimes: why a long-lived 'Singleton' service maintains a 'Strong Reference' to the short-lived Blazor component instance via the delegate. Show the solution by implementing '@implements IDisposable' and unsubscribing from the event.",
+      "Criteria": [
+        {
+          "Description": "Explicitly explains the Lifetime mismatch (the Singleton service retains the shorter-lived component instance in memory via the event delegate)",
+          "Weight": 50
+        },
+        {
+          "Description": "Implements '@implements IDisposable' and unsubscribes from the event ('-=') inside the Dispose() method",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Blazor: Static SSR with @attribute [StreamRendering] (.NET 8+)",
+      "Category": "Blazor",
+      "Prompt": "A Blazor component in Static Server-Side Rendering (SSR) mode loads a product list from the database:\n\n@page \"/products\"\n@inject ProductService Svc\n\n@if (_products == null) {\n    <p>Loading...</p>\n} else {\n    @foreach (var p in _products) { <ProductCard Product=\"p\" /> }\n}\n\n@code {\n    private List<Product>? _products;\n    protected override async Task OnInitializedAsync() {\n        _products = await Svc.GetAllAsync();\n    }\n}\n\nThe user sees a blank page for 2 seconds before any content is displayed.\nMANDATORY REQUIREMENTS:\n1. Explain the limitation of Static SSR without streaming: the server completes all rendering before sending the initial HTML bytes to the client.\n2. Add '@attribute [StreamRendering]' and show how the component sends placeholder HTML ('Loading...') immediately, then updates the DOM once data becomes available.",
+      "Criteria": [
+        {
+          "Description": "Explains that without streaming the server blocks the entire HTTP response until component rendering finishes completely",
+          "Weight": 40
+        },
+        {
+          "Description": "Adds '@attribute [StreamRendering]' to the component, showing that placeholder HTML is sent immediately and data streams in once ready",
+          "Weight": 60
+        }
+      ]
+    },
+    {
+      "Name": "Blazor: Unnecessary Re-rendering (EventCallback vs Action)",
+      "Category": "Blazor",
+      "Prompt": "A Blazor child component exposes a callback to its parent using 'Action':\n[Parameter] public Action OnDataSaved { get; set; }\n\nThe developer notices that the parent UI does NOT automatically update when 'OnDataSaved' is invoked.\nMANDATORY REQUIREMENTS:\n1. Explicitly explain in the explanatory text (not just code comments) that 'EventCallback' or 'EventCallback<T>' includes a dispatcher that automatically invokes 'StateHasChanged()' on the parent component.\n2. Replace 'Action' with '[Parameter] public EventCallback OnDataSaved { get; set; }' and invoke it using 'await OnDataSaved.InvokeAsync()'.",
+      "Criteria": [
+        {
+          "Description": "Explicitly explains in text that EventCallback automatically triggers StateHasChanged() on the parent component",
+          "Weight": 50
+        },
+        {
+          "Description": "Replaces 'Action' with '[Parameter] public EventCallback OnDataSaved { get; set; }' and invokes it via await OnDataSaved.InvokeAsync()",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "MAUI: Memory Leaks in Handlers / Native Events",
+      "Category": "MAUI",
+      "Prompt": "A developer creates a custom control or Handler in .NET MAUI that subscribes to native platform view events:\n\nprotected override void ConnectHandler(PlatformView platformView) {\n    base.ConnectHandler(platformView);\n    platformView.TextChanged += OnNativeTextChanged;\n}\n\nWhen navigating back and destroying the page in MAUI, the Garbage Collector fails to collect the control, and the page remains in memory. Explain the technical reason for the memory leak and rewrite the Handler applying proper cleanup.",
+      "Criteria": [
+        {
+          "Description": "Explains that native event subscriptions maintain Strong References in the platform layer, preventing Garbage Collection",
+          "Weight": 50
+        },
+        {
+          "Description": "Implements event unsubscription (-=) and reference cleanup inside 'DisconnectHandler' or during the 'Unloaded' event",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "MAUI: UI Thread Violation (MainThread)",
+      "Category": "MAUI",
+      "Prompt": "In .NET MAUI, a ViewModel runs a heavy background task and attempts to update a UI-bound ObservableCollection:\n\npublic async Task LoadDataAsync() {\n    await Task.Run(() => {\n        var data = _repository.FetchLargeDataset();\n        UserList.Clear();\n        foreach (var item in data) UserList.Add(item);\n    });\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the UI Thread (Main Thread) restriction on mobile and desktop platforms.\n2. Rewrite the method using the official .NET MAUI API 'MainThread.BeginInvokeOnMainThread' or 'MainThread.InvokeOnMainThreadAsync' to dispatch collection mutations to the main thread.",
+      "Criteria": [
+        {
+          "Description": "Explains the Main UI Thread restriction across mobile and desktop platforms",
+          "Weight": 50
+        },
+        {
+          "Description": "Applies 'MainThread.BeginInvokeOnMainThread' or 'MainThread.InvokeOnMainThreadAsync' explicitly in the code",
+          "Weight": 50
+        }
+      ]
+    }
+  ]
+}

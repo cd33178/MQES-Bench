@@ -1,0 +1,267 @@
+{
+  "Name": "CLR Memory Management, Zero-Allocation & Performance Suite",
+  "DefaultSystemPrompt": "You are a Principal High-Performance .NET Architect expert in CLR internals, Garbage Collector mechanics (Gen 0/1/2, LOH, POH), memory allocation profiling, and zero-allocation techniques (Span<T>, Memory<T>, ArrayPool<T>, System.IO.Pipelines).\n1. Provide optimized, low-allocation C# solutions.\n2. Address boxing/unboxing, closure captures, and Stack vs. Heap allocation trade-offs explicitly.",
+  "DefaultUserPromptSuffix": "MANDATORY OUTPUT CONSTRAINTS:\n1. Wrap code in ```csharp ... ``` blocks.\n2. Detail the exact GC generation impact (Gen 0/1/2 or LOH) and heap allocation profile in explanations.",
+  "DefaultJudgeSystemPrompt": "You are a strict technical evaluation judge for .NET Memory Management and Performance Optimization.\n\nCRITICAL EVALUATION GUIDELINES:\n1. Memory & Span Semantics:\n   - Verify that 'ref struct' (Span<T>) is not captured across await boundaries or inside heap-allocated closures.\n   - Ensure 'ArrayPool<T>.Shared.Return' is enclosed in a try/finally block.\n   - Verify that string parsing uses 'ReadOnlySpan<char>' with manual slicing (IndexOf/Slice) without allocating intermediate string arrays.\n2. BCL & Pipelines:\n   - Verify 'System.IO.Pipelines' cursor advancement using 'Reader.AdvanceTo()'.\n   - Acknowledge 'FrozenDictionary' layout benefits for immutable lookups.\n3. Output Formatting:\n   - Output your decision on the very first line as:\n   VERDICT: PASS\n   or\n   VERDICT: FAIL\n\n   Followed by a brief one-sentence reason.",
+  "Tests": [
+    {
+      "Name": "Trap: Span<T> Across Await Boundary",
+      "Category": "Adversarial - Memory",
+      "Prompt": "A developer attempts to optimize memory in a .NET 10 asynchronous method by writing the following code:\n\npublic async Task<int> ProcessPayloadAsync(string jsonPayload) {\n    ReadOnlySpan<char> span = jsonPayload.AsSpan();\n    int id = FastParseId(span);\n    \n    await Task.Delay(100);\n    \n    int status = FastParseStatus(span);\n    return id + status;\n}\n\nThe code fails to compile.\nMANDATORY REQUIREMENTS:\n1. Explain the exact technical reason why a 'ref struct' (such as Span<T>) cannot be part of an 'async' method state machine.\n2. Provide a refactoring that DOES COMPILE in C#: process Spans in synchronous helper methods (non-async) BEFORE or AFTER the 'await', or use 'ReadOnlyMemory<char>'.",
+      "Criteria": [
+        {
+          "Description": "Explains that 'ref struct' types reside strictly on the Stack and the compiler forbids their use across await in async methods because state machines are allocated on the Heap",
+          "Weight": 50
+        },
+        {
+          "Description": "Provides a valid refactoring that compiles in C# (using synchronous helper methods or ReadOnlyMemory<char>)",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Memory: LOH Pressure from Temporary Arrays (ArrayPool)",
+      "Category": "Memory",
+      "Prompt": "Analyze this Web API service processing files in 100 KB chunks under thousands of simultaneous requests:\n\npublic async Task ProcessFileStreamAsync(Stream fileStream) {\n    byte[] buffer = new byte[102400];\n    int bytesRead;\n    while ((bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0) {\n        ProcessChunk(buffer, bytesRead);\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the impact of allocating arrays greater than 85,000 bytes on the Large Object Heap (LOH) and the memory fragmentation it causes in Generation 2 (Gen 2) of the Garbage Collector.\n2. Rewrite the method using 'ArrayPool<byte>.Shared.Rent()' and 'Return()' within a 'try/finally' block to reuse pooled memory.",
+      "Criteria": [
+        {
+          "Description": "Explains that objects larger than 85,000 bytes are allocated on the Large Object Heap (LOH), increasing fragmentation and triggering costly Gen 2 collections",
+          "Weight": 50
+        },
+        {
+          "Description": "Implements ArrayPool<byte>.Shared.Rent() and ensures buffer return with Return() inside a try/finally block",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Memory: RecyclableMemoryStream vs MemoryStream for High Throughput",
+      "Category": "Memory",
+      "Prompt": "Analyze this high-frequency serialization service in a Web API:\n\npublic async Task<byte[]> SerializeAndSendAsync(OrderEvent evt) {\n    using var ms = new MemoryStream();\n    await JsonSerializer.SerializeAsync(ms, evt);\n    var bytes = ms.ToArray();\n    await _channel.PublishAsync(bytes);\n    return bytes;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why 'MemoryStream' allocates a new Heap buffer on each call, and how 'ms.ToArray()' creates an extra copy, increasing GC pressure in high-throughput scenarios.\n2. Refactor the service using 'Microsoft.IO.RecyclableMemoryStream' (RecyclableMemoryStreamManager) to reuse pooled Heap buffers and eliminate repetitive allocations.",
+      "Criteria": [
+        {
+          "Description": "Explains that MemoryStream allocates a buffer on each use and ToArray() duplicates memory, increasing GC pressure in high-frequency operations",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors using RecyclableMemoryStreamManager.GetStream() to obtain streams from a reusable pool, eliminating repetitive allocations",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Stack Allocation (stackalloc) vs Heap",
+      "Category": "Memory",
+      "Prompt": "Analyze this method that processes and transforms a 256-byte network packet performing temporary mutations before calculating a checksum:\n\npublic byte ProcessAndChecksum(ReadOnlySpan<byte> payload) {\n    byte[] tempBuffer = new byte[256];\n    payload.Slice(0, 256).CopyTo(tempBuffer);\n    \n    for (int i = 0; i < tempBuffer.Length; i++) tempBuffer[i] ^= 0xFF;\n    \n    byte checksum = 0;\n    foreach (var b in tempBuffer) checksum ^= b;\n    return checksum;\n}\n\nRewrite the method to eliminate the array allocation on the Heap.\nMANDATORY REQUIREMENT: Declare the temporary working memory using 'stackalloc byte[256]' (or Span<byte> pointing to stackalloc) to perform local mutations strictly on the Stack.",
+      "Criteria": [
+        {
+          "Description": "Declares and initializes the temporary buffer using 'stackalloc' to allocate memory on the Stack",
+          "Weight": 50
+        },
+        {
+          "Description": "Manipulates the Stack buffer via Span<byte> without requiring direct 'unsafe' code blocks",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Memory Leaks via Event Subscription",
+      "Category": "Memory Leaks",
+      "Prompt": "Analyze this structure in a C# system:\npublic class StockTicker {\n    public event EventHandler<decimal> PriceChanged;\n}\npublic class PriceDisplay {\n    public PriceDisplay(StockTicker ticker) {\n        ticker.PriceChanged += OnPriceChanged;\n    }\n    private void OnPriceChanged(object sender, decimal newPrice) {\n        Console.WriteLine($\"New price: {newPrice}\");\n    }\n}\nIf 'StockTicker' is a long-lived Singleton and thousands of 'PriceDisplay' instances are created and destroyed over time, explain why a Memory Leak occurs and rewrite 'PriceDisplay' applying the recommended C# solution (IDisposable or Weak Events).",
+      "Criteria": [
+        {
+          "Description": "Explains that the Singleton publisher holds a Strong Reference to the PriceDisplay instance, preventing its collection by the Garbage Collector",
+          "Weight": 50
+        },
+        {
+          "Description": "Implements the IDisposable interface to unsubscribe from the event (-=) or uses the WeakEventManager / WeakReference pattern",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Memory Optimization with Span<T>",
+      "Category": "Performance",
+      "Prompt": "I have this method processing logs formatted as 'YYYY-MM-DD|SEVERITY|MESSAGE':\npublic List<string> Extract(string[] lines) {\n    var list = new List<string>();\n    foreach(var l in lines) {\n        var p = l.Split('|');\n        if(p.Length >= 2) list.Add(p[1]);\n    }\n    return list;\n}\n\nRewrite it in C# using ReadOnlySpan<char> to optimize memory.\nMANDATORY REQUIREMENTS:\n1. Do NOT use .Split(). Use IndexOf / Slice to extract the severity.\n2. Explicitly explain in text how ReadOnlySpan<char> reduces Garbage Collector (GC) pressure by eliminating intermediate array allocations on the Heap during parsing.",
+      "Criteria": [
+        {
+          "Description": "Uses ReadOnlySpan<char> or AsSpan()",
+          "Weight": 35
+        },
+        {
+          "Description": "Completely eliminates .Split() usage by applying manual slicing with IndexOf / Slice",
+          "Weight": 35
+        },
+        {
+          "Description": "Explicitly mentions the reduction of Garbage Collector (GC) pressure",
+          "Weight": 30
+        }
+      ]
+    },
+    {
+      "Name": "Performance: Closure Allocations in Lambdas",
+      "Category": "Performance",
+      "Prompt": "Analyze the following C# code on a performance-critical path:\n\npublic void FilterOrders(List<Order> orders, int minAmount) {\n    int discountThreshold = 100;\n    var filtered = orders.Where(o => o.Amount > minAmount && o.Amount < discountThreshold);\n    ProcessFiltered(filtered);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the impact on the Heap and GC when capturing local variables (closures) inside lambda expressions.\n2. Refactor the code using static lambdas or a direct imperative loop to avoid closure allocations on the Heap.",
+      "Criteria": [
+        {
+          "Description": "Explains that capturing local variables forces the creation of a closure class instance (DisplayClass) on the Heap on each execution",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the code avoiding Heap allocations through static lambdas or a direct imperative loop",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Performance: FrozenDictionary<TKey, TValue> for Read-Only Data (.NET 8+)",
+      "Category": "Performance",
+      "Prompt": "Analyze this ISO country code mapping service initialized once at startup and queried millions of times throughout the application lifecycle:\n\npublic class CountryService {\n    private static readonly Dictionary<string, string> _codes = new() {\n        [\"US\"] = \"United States\", [\"MX\"] = \"Mexico\",\n    };\n    \n    public string? GetName(string code) => _codes.GetValueOrDefault(code);\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the advantages of 'FrozenDictionary<TKey, TValue>' (System.Collections.Frozen, .NET 8+) over 'Dictionary<TKey, TValue>' for immutable, read-heavy collections: memory layout optimization, faster lookups, and zero synchronization overhead.\n2. Refactor the static field using 'FrozenDictionary<string, string>' initialized with '.ToFrozenDictionary()' at startup.",
+      "Criteria": [
+        {
+          "Description": "Explains that FrozenDictionary optimizes internal layout for frequent reads with perfect or near-perfect hashing, outperforming Dictionary for immutable read-only collections",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the static field using FrozenDictionary<string, string> initialized with .ToFrozenDictionary() during application startup",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Performance: Multiple Re-evaluation of IEnumerable",
+      "Category": "Performance",
+      "Prompt": "Analyze the following method in a high-performance application:\n\npublic void ProcessUsers(IEnumerable<User> userSequence) {\n    var activeUsers = userSequence.Where(u => u.IsActive).Select(u => TransformUser(u));\n    \n    if (activeUsers.Any()) {\n        Console.WriteLine($\"Total active: {activeUsers.Count()}\");\n        foreach (var user in activeUsers) {\n            SaveToDatabase(user);\n        }\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the performance trap of Deferred Execution in 'IEnumerable<T>' when evaluated multiple times (.Any(), .Count(), foreach).\n2. Refactor the method to evaluate and iterate the sequence only once, or materialize it properly in memory when appropriate.",
+      "Criteria": [
+        {
+          "Description": "Explains that deferred execution causes the LINQ query pipeline to re-execute from scratch on each invocation (.Any(), .Count(), foreach)",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the logic materializing the collection only once (e.g., ToArray/ToList) or restructuring the flow into a single iteration",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Performance: Stream Parsing with System.IO.Pipelines",
+      "Category": "Performance",
+      "Prompt": "Analyze a parser processing frames from a network Stream by accumulating data in temporary buffers:\n\npublic async Task ReadStreamAsync(Stream stream) {\n    byte[] buffer = new byte[4096];\n    int bytesRead;\n    while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0) {\n        ProcessBuffer(buffer, bytesRead);\n    }\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the advantage of 'System.IO.Pipelines' (PipeReader/PipeWriter) for managing reusable memory buffers ('ReadOnlySequence<byte>') without intermediate Heap allocations or copying.\n2. Show the refactoring using 'PipeReader.Create(stream)', processing the 'ReadResult' with 'PipeReader.ReadAsync()', manipulating the 'ReadOnlySequence<byte>', and advancing the cursor with 'Reader.AdvanceTo()'.",
+      "Criteria": [
+        {
+          "Description": "Explains that System.IO.Pipelines automatically manages buffer memory (ReadOnlySequence), eliminating copying and Heap allocations",
+          "Weight": 50
+        },
+        {
+          "Description": "Implements PipeReader.ReadAsync(), processes ReadOnlySequence<byte>, and frees consumed memory with Reader.AdvanceTo()",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Performance: Value Type Boxing and Unboxing",
+      "Category": "Performance",
+      "Prompt": "Analyze the following method processing millions of 2D coordinates on a high-frequency critical path:\n\npublic struct Point {\n    public int X { get; set; }\n    public int Y { get; set; }\n}\n\npublic void ProcessPoints(List<Point> points) {\n    foreach (var p in points) {\n        LogValue(p);\n        string formatted = string.Format(\"Point: {0}, {1}\", p.X, p.Y);\n    }\n}\n\nprivate void LogValue(object obj) { }\n\nExplain the impact of Boxing and Unboxing on Heap memory and the Garbage Collector (GC).\nMANDATORY REQUIREMENTS:\n1. Explicitly explain how passing a 'struct' to 'object' forces Heap memory allocation (Boxing).\n2. Refactor the method completely eliminating Boxing by using generics ('LogValue<T>(T obj)') and modern string interpolation or ISpanFormattable.",
+      "Criteria": [
+        {
+          "Description": "Explains that Boxing allocates memory on the Heap to wrap a value type (struct) inside a reference object (object), increasing GC pressure",
+          "Weight": 50
+        },
+        {
+          "Description": "Eliminates Boxing by refactoring to generics (T) and direct interpolation or ISpanFormattable",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "Performance: ValueTask vs Task for Hot Paths",
+      "Category": "Performance",
+      "Prompt": "Analyze the following in-memory cache method invoked millions of times per second:\n\npublic async Task<string?> GetCachedValueAsync(string key) {\n    if (_cache.TryGetValue(key, out var cached))\n        return cached;\n    \n    var value = await FetchFromDatabaseAsync(key);\n    _cache[key] = value;\n    return value;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why returning 'Task<T>' on hot paths that frequently complete synchronously creates unnecessary Task object allocations on the Heap, causing GC pressure.\n2. Refactor the method to use 'ValueTask<string?>' when the result completes synchronously (cache hit), avoiding Task object allocation.",
+      "Criteria": [
+        {
+          "Description": "Explains that Task<T> always allocates an object on the Heap even on synchronous completions, whereas ValueTask<T> avoids this allocation on the happy path",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors the method returning ValueTask<string?> and directly returning the cached value on the synchronous path without creating a Task object",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "String Concatenation and Heap Pressure",
+      "Category": "Performance",
+      "Prompt": "Analyze the following method generating a plain text report from thousands of records:\npublic string GenerateReport(List<string> dataItems) {\n    string report = \"HEADER\\n\";\n    foreach (var item in dataItems) {\n        report += \"LOG: \" + item.Trim() + \" | STATUS: OK\\n\";\n    }\n    return report;\n}\nExplain the performance and memory allocation issue on the Heap (LOH / GC), and rewrite the method applying the best optimized alternative in C# .NET.",
+      "Criteria": [
+        {
+          "Description": "Explicitly explains System.String immutability and excessive Heap allocations in loops",
+          "Weight": 40
+        },
+        {
+          "Description": "Replaces concatenation (+=) with StringBuilder, ValueStringBuilder, or string.Create",
+          "Weight": 60
+        }
+      ]
+    },
+    {
+      "Name": "System.Text.Json: Source Generator for NativeAOT",
+      "Category": "System.Text.Json Performance",
+      "Prompt": "Analyze this serialization code in a NativeAOT application:\n\nvar json = JsonSerializer.Serialize(user);\n\nMANDATORY REQUIREMENTS:\n1. Explain the runtime reflection problem with JsonSerializer without a Source Generator in NativeAOT.\n2. Implement '[JsonSerializable(typeof(User))]' with a generated partial 'JsonSerializerContext'.",
+      "Criteria": [
+        {
+          "Description": "Explains that NativeAOT strips reflection metadata, causing JsonSerializer to fail without a Source Generator",
+          "Weight": 50
+        },
+        {
+          "Description": "Declares [JsonSerializable] and inherits from JsonSerializerContext correctly",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "System.Text.Json: Utf8JsonReader for Zero-Allocation Parsing",
+      "Category": "System.Text.Json Performance",
+      "Prompt": "Analyze this JSON parsing from a Stream:\n\nvar users = await JsonSerializer.DeserializeAsync<List<User>>(stream);\n\nMANDATORY REQUIREMENTS:\n1. Explain the advantage of 'Utf8JsonReader' for incremental parsing without string allocations.\n2. Show how to parse token-by-token with 'Utf8JsonReader' over 'ReadOnlySpan<byte>'.",
+      "Criteria": [
+        {
+          "Description": "Explains that Utf8JsonReader operates over spans without allocating intermediate strings on the Heap",
+          "Weight": 50
+        },
+        {
+          "Description": "Shows a loop with reader.Read() and switch over TokenType to parse properties",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "I/O Performance: Synchronous Blocking Network and HTTP Calls",
+      "Category": "I/O Performance",
+      "Prompt": "Analyze the following method consuming an external REST API inside an ASP.NET Core critical path:\n\npublic async Task<string> FetchExternalReportAsync(HttpClient client, string url) {\n    var request = new HttpRequestMessage(HttpMethod.Get, url);\n    HttpResponseMessage response = client.Send(request);\n    using var reader = new StreamReader(response.Content.ReadAsStream());\n    return reader.ReadToEnd();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why using 'client.Send()' or 'StreamReader.ReadToEnd()' synchronously blocks execution threads during network I/O latency, degrading overall server scalability.\n2. Refactor the method using end-to-end asynchronous calls with 'await client.SendAsync()' (or 'GetAsync()') and 'await response.Content.ReadAsStringAsync()' (or 'ReadToEndAsync()').",
+      "Criteria": [
+        {
+          "Description": "Explains that synchronous network calls (client.Send / ReadToEnd) freeze execution threads during network I/O latency",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors network calls using client.SendAsync / GetAsync and ReadToEndAsync / ReadAsStringAsync with await end-to-end",
+          "Weight": 50
+        }
+      ]
+    },
+    {
+      "Name": "I/O Performance: Synchronous File System Operations in Async Methods",
+      "Category": "I/O Performance",
+      "Prompt": "Analyze the following method in a high-traffic Web API / Service processing configuration and data files:\n\npublic async Task<ProcessResult> ProcessCustomerDataAsync(string filePath) {\n    string jsonContent = File.ReadAllText(filePath);\n    var result = await ProcessDataWithApiAsync(jsonContent);\n    File.WriteAllText(filePath, result.SerializedData);\n    return result;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the negative impact of calling synchronous File System methods ('File.ReadAllText', 'File.WriteAllText') on ThreadPool threads within async requests, causing Thread Starvation under high concurrency.\n2. Refactor the method replacing the calls with native asynchronous variants 'File.ReadAllTextAsync()' and 'File.WriteAllTextAsync()' with 'await'.",
+      "Criteria": [
+        {
+          "Description": "Explains that calling synchronous I/O operations in async methods blocks ThreadPool threads, causing Thread Starvation under high load",
+          "Weight": 50
+        },
+        {
+          "Description": "Refactors File System calls using File.ReadAllTextAsync() and File.WriteAllTextAsync() with await",
+          "Weight": 50
+        }
+      ]
+    }
+  ]
+}
