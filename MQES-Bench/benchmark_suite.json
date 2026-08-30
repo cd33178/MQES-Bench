@@ -4,9 +4,9 @@
   // Sorted hierarchically by Category (A-Z) and Test Name (A-Z)
   // ========================================================================
   "Name": "Comprehensive .NET 10, C# 14, SQL, MAUI & Architecture Suite",
-  "DefaultSystemPrompt": "You are a Senior .NET Application Architect and SQL Server DBA expert in C# (.NET 8/9/10), CLR runtime internals (CLR, IL, GC, Memory Management), and T-SQL.\nWhen answering theoretical, design, and code refactoring challenges:\n1. Be extremely precise with CLR runtime internals and exact database terminology (e.g., state machine heap allocations, lock types, memory layout).\n2. Provide complete, production-ready, fully compiling code solutions without omitting key logic.\n3. Structure responses concisely while covering deep architectural mechanics.",
-  "DefaultUserPromptSuffix": "MANDATORY OUTPUT CONSTRAINTS:\n1. Provide complete, production-ready, fully compiling code snippets wrapped in standard markdown code blocks (e.g., ```csharp ... ``` or ```sql ... ```).\n2. Ensure all edge cases, memory allocations, and concurrency considerations are explicitly addressed.\n3. Keep technical explanations direct, rigorous, and free of unnecessary conversational filler.",
-  "DefaultJudgeSystemPrompt": "You are a strict, highly accurate technical evaluation judge for modern .NET 10, C# 14, CLR runtime internals, and T-SQL.\nCRITICAL EVALUATION GUIDELINES (AVOID FALSE NEGATIVES):\n1. C# 14 / .NET 10 Preview Specifications:\n   - Left-Hand Side (LHS) Null-Conditional Assignment (e.g., 'a?.b?.Status = Updated\"' or 'a?.b -= c') is a specific C# 14 (.NET 10) enhancement. Do NOT confuse it with legacy C# 8.0/10 null features or mark it as failing.\n   - Extension Blocks (syntax: 'extension Name for TargetType') supporting instance properties, static properties, and static methods are valid C# 14 specifications.\n   - Contextual 'field' keyword in property accessors and 'where T : allows ref struct' anti-constraints are valid modern .NET 10 specifications.\n2. Modern BCL Types (.NET 8/9/10):\n   - Acknowledge 'FrozenDictionary<TKey, TValue>', 'OrderedDictionary<TKey, TValue>', and 'System.Threading.Lock' as native BCL additions.\n   - If the model correctly explains internal layout advantages (immutable perfect/near-perfect hashing, O(1) lookups, EnterScope/lock keyword integration) and refactors using native methods (e.g., '.ToFrozenDictionary()'), score it as PASS.\n3. Semantics & Architectural Soundness:\n   - If the model satisfies the architectural and correctness intent of the criterion (e.g., non-blocking streaming, non-allocating spans, lock protection, Sargable date ranges), mark it as PASS even if slight cosmetic syntactic variations exist.\n4. Output Formatting:\\n   - Do NOT output internal thinking or reasoning steps.\n   - You must immediately output your final decision on the very first line as:\n   VERDICT: PASS\n   or\n   VERDICT: FAIL\n\n   Followed by a brief one-sentence reason.",
+  "DefaultSystemPrompt": "You are a Senior .NET Application Architect and SQL Server DBA expert in C# (.NET 8/9/10), CLR runtime internals (CLR, IL, GC, Memory Management), and T-SQL.\nWhen answering theoretical, design, and code refactoring challenges:\n1. Be extremely precise with CLR runtime internals and exact database terminology (e.g., state machine heap allocations, lock types, memory layout).\n2. Provide complete, production-ready, fully compiling code solutions without omitting key logic.\n3. Structure responses concisely while covering deep architectural mechanics.\nCRITICAL: Keep your internal reasoning under 200 tokens. Do not explore multiple alternatives. Think concisely and output the solution immediately.",
+  "DefaultUserPromptSuffix": "MANDATORY OUTPUT CONSTRAINTS:\n1. Provide complete, production-ready, fully compiling code snippets wrapped in standard markdown code blocks (e.g., ```csharp ... ``` or ```sql ... ```).\n2. Ensure all edge cases, memory allocations, and concurrency considerations are explicitly addressed.\n3. Keep technical explanations direct, rigorous, and free of unnecessary conversational filler.\n4. Do not explain background theory. Plan your steps in no more than 3 bullet points inside thinking tags, then output the code directly.",
+  "DefaultJudgeSystemPrompt": "You are a strict technical evaluation judge for modern C# 14, .NET 10, CLR runtime internals, and T-SQL.\n\nCRITICAL EVALUATION GUIDELINES (AVOID FALSE NEGATIVES):\n1. C# 14 / .NET 10 Preview Features:\n   - 'extension Name for TargetType' (Extension Blocks) is a REAL, VALID C# 14 syntax. If the model uses it to define properties/methods, you MUST mark it as PASS.\n   - 'OrderedDictionary<TKey, TValue>' in System.Collections.Generic is a REAL, NATIVE .NET 9/10 generic collection with O(1) lookups and index access. If demonstrated, you MUST mark it as PASS.\n   - Contextual 'field' keyword and 'where T : allows ref struct' are VALID .NET 10 features.\n2. Semantic & Conceptual Soundness:\n   - If the candidate explains that string concatenation causes continuous memory reallocation/copying in loops and heap fragmentation, mark as PASS even if the literal word 'immutability' is omitted.\n   - If the candidate explains deadlocks and ThreadPool blocking caused by '.Result' or 'new Task(async () => ...)', mark as PASS.\n3. Output Format:\n   - Output your decision on the very first line as:\n   VERDICT: PASS\n   or\n   VERDICT: FAIL\n\n   Followed by a brief one-sentence reason.",
   "Tests": [
     // ------------------------------------------------------------------------
     // CATEGORY: .NET 10 & C# 14
@@ -29,14 +29,14 @@
     {
       "Name": ".NET 10: Extension Blocks for Static Members and Properties",
       "Category": ".NET 10 & C# 14",
-      "Prompt": "In C# 14 (.NET 10), Extension Blocks introduce the ability to extend types with instance properties, static properties, and static extension methods.\n\nWrite a C# 14 extension block for 'DateTime' that defines:\n1. An 'IsWeekend' instance property (returns bool).\n2. A 'DefaultFormat' static property (returns string).\n\nOUTPUT INSTRUCTIONS:\n1. Provide the complete C# 14 code block wrapped in ```csharp ... ``` using the 'extension ... for DateTime' syntax.\n2. Immediately follow the code block with a concise 1-2 paragraph technical explanation confirming that C# 14 extension blocks support instance properties, static properties, and static extension methods.",
+      "Prompt": "In C# 14 (.NET 10), Extension Blocks introduce the ability to extend types with instance properties, static properties, and static extension methods.\n\nWrite a C# 14 extension block for 'DateTime' that defines:\n1. An 'IsWeekend' instance property (returns bool).\n2. A 'DefaultFormat' static property (returns string).\n\nOUTPUT INSTRUCTIONS:\n1. Provide the complete C# 14 code block wrapped in ```csharp ... ``` using the 'extension ... for DateTime' syntax.\n2. Add a brief technical explanation confirming that C# 14 extension blocks support instance properties, static properties, and static methods.",
       "Criteria": [
         {
-          "Description": "Explains extension block syntax (extension Name for TargetType) in C# 14, noting that it supports instance properties, static properties, and static extension methods",
+          "Description": "Explains that C# 14 extension blocks (extension Name for TargetType) support instance properties, static properties, or static methods",
           "Weight": 50
         },
         {
-          "Description": "Writes C# 14 code using the 'extension ... for DateTime' structure, implementing the requested members correctly",
+          "Description": "Writes code using the 'extension ... for DateTime' syntax implementing the requested members",
           "Weight": 50
         }
       ]
@@ -108,14 +108,14 @@
     {
       "Name": ".NET 10: Generic OrderedDictionary<TKey, TValue> Collection",
       "Category": ".NET 10 & C# 14 - Data Types & Keywords",
-      "Prompt": "In earlier .NET versions, developers had to choose between Dictionary<TKey, TValue> (fast O(1) key lookups but no insertion order) and List<KeyValuePair<TKey, TValue>> (preserves order, but slow O(N) lookups), or rely on the legacy non-generic System.Collections.Specialized.OrderedDictionary.\n\nMANDATORY REQUIREMENTS:\n1. Explain the native generic 'System.Collections.Generic.OrderedDictionary<TKey, TValue>' introduced in .NET 9/10, explaining its O(1) key lookups, deterministic insertion order preservation, and indexed access.\n2. Write a concise code example directly instantiating and consuming the built-in 'OrderedDictionary<string, int>' (demonstrating addition, access by key, and positional access by index). Do NOT implement a custom collection class from scratch.",
+      "Prompt": "In .NET 9/10, a native generic 'OrderedDictionary<TKey, TValue>' was introduced in System.Collections.Generic.\n\nMANDATORY REQUIREMENTS:\n1. Explain its O(1) key lookups, deterministic insertion order preservation, and indexed access.\n2. Demonstrate instantiating and consuming 'new OrderedDictionary<string, int>()' showing key lookup and index access.",
       "Criteria": [
         {
-          "Description": "Explains that .NET natively provides generic System.Collections.Generic.OrderedDictionary<TKey, TValue>, highlighting O(1) lookups, insertion-order preservation, and indexed access without requiring custom wrappers",
+          "Description": "Explains that OrderedDictionary<TKey, TValue> provides O(1) lookups, preserves insertion order, and supports indexed access",
           "Weight": 50
         },
         {
-          "Description": "Demonstrates instantiation and usage of built-in OrderedDictionary<TKey, TValue> showing both key-based lookup and positional index access without writing a custom dictionary class",
+          "Description": "Demonstrates instantiating 'new OrderedDictionary<TKey, TValue>()' with key and index-based access",
           "Weight": 50
         }
       ]
@@ -157,14 +157,14 @@
     {
       "Name": "Trap: Async Void in Task Constructor",
       "Category": "Adversarial - Async",
-      "Prompt": "Analyze the following C# code:\n\npublic void StartProcessing() {\n    var task = new Task(async () => {\n        await Task.Delay(1000);\n        SaveToDatabase();\n    });\n    task.Start();\n    task.Wait();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why SaveToDatabase() executes after task.Wait() finishes and what problem arises when using async inside the Task constructor.\n2. Refactor the method to use async/await properly without 'new Task', 'Start', or 'Wait'.",
+      "Prompt": "Analyze the following C# code:\n\npublic void StartProcessing() {\n    var task = new Task(async () => {\n        await Task.Delay(1000);\n        SaveToDatabase();\n    });\n    task.Start();\n    task.Wait();\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why SaveToDatabase() executes after task.Wait() finishes or causes a deadlock, detailing how async lambdas behave inside the Task constructor.\n2. Refactor the method to use async/await properly without 'new Task', 'Start', or 'Wait'.",
       "Criteria": [
         {
-          "Description": "Explains that the async lambda is converted to 'async void' due to the Task(Action) overload and that the outer Task completes at the first await",
+          "Description": "Explains that the Task constructor delegate is not awaited (runs as async void / fire-and-forget) causing the outer task to complete prematurely or deadlock on Wait()",
           "Weight": 50
         },
         {
-          "Description": "Refactors the method to an asynchronous 'async Task' signature, eliminating 'new Task', 'Start', and 'Wait' in the final solution",
+          "Description": "Refactors the method to an asynchronous 'async Task' signature, eliminating 'new Task', 'Start', and 'Wait'",
           "Weight": 50
         }
       ]
@@ -369,7 +369,7 @@
     {
       "Name": "Async: Mixing Parallel.ForEach with Async Lambdas",
       "Category": "Async & Concurrency",
-      "Prompt": "Analyze the following method attempting to process multiple URLs asynchronously:\n\npublic void DownloadAll(List<string> urls) {\n    Parallel.ForEach(urls, async url => {\n        await DownloadFileAsync(url);\n    });\n    Console.WriteLine(\"Downloads completed.\");\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why 'Parallel.ForEach' does not await asynchronous tasks and what happens internally with unhandled exceptions.\n2. Refactor the code using the appropriate .NET 6+ API for parallel asynchronous iteration.",
+      "Prompt": "Analyze the following method attempting to process multiple URLs asynchronously:\n\npublic void DownloadAll(List<string> urls) {\n    Parallel.ForEach(urls, async url => {\n        await DownloadFileAsync(url);\n    });\n    Console.WriteLine(\"Downloads completed.\");\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain why 'Parallel.ForEach' does not await asynchronous tasks and what happens internally with unhandled exceptions.\n2. MANDATORY: Refactor the code strictly using the native 'Parallel.ForEachAsync' API with 'ParallelOptions { MaxDegreeOfParallelism = 10 }'. Do NOT implement custom SemaphoreSlim queues.",
       "Criteria": [
         {
           "Description": "Explains that Parallel.ForEach accepts Action<T>, converting the async lambda into 'async void', causing the loop to return before tasks complete and silencing/crashing on exceptions",
@@ -543,14 +543,14 @@
     {
       "Name": "Concurrency: Parallel.ForEach in I/O Operations (Thread Starvation)",
       "Category": "Concurrency",
-      "Prompt": "Analyze the following code used to download 500 PDF reports:\n\nParallel.ForEach(pdfUrls, url => {\n    using var client = new HttpClient();\n    var data = client.GetByteArrayAsync(url).Result;\n    SaveToDisk(url, data);\n});\n\nMANDATORY REQUIREMENTS:\n1. Explain the difference between CPU-Bound and I/O-Bound workloads, and why 'Parallel.ForEach' causes ThreadPool thread starvation in network operations.\n2. Refactor the code using the 'Parallel.ForEachAsync' API with 'ParallelOptions.MaxDegreeOfParallelism = 10' and asynchronous calls with await.",
+      "Prompt": "Analyze the following code used to download 500 PDF reports:\n\nParallel.ForEach(pdfUrls, url => {\n    using var client = new HttpClient();\n    var data = client.GetByteArrayAsync(url).Result;\n    SaveToDisk(url, data);\n});\n\nMANDATORY REQUIREMENTS:\n1. Explain the difference between CPU-Bound and I/O-Bound workloads, and why 'Parallel.ForEach' causes ThreadPool thread starvation in network operations.\n2. Refactor the code strictly using the native 'Parallel.ForEachAsync' API with 'ParallelOptions { MaxDegreeOfParallelism = 10 }' and await. Do NOT implement custom SemaphoreSlim queues.",
       "Criteria": [
         {
-          "Description": "Explains the difference between CPU-Bound and I/O-Bound tasks, highlighting that Parallel.ForEach blocks ThreadPool threads waiting on network I/O instead of yielding",
+          "Description": "Explains that Parallel.ForEach blocks ThreadPool threads on network I/O causing thread starvation",
           "Weight": 50
         },
         {
-          "Description": "Refactors the code using Parallel.ForEachAsync with ParallelOptions { MaxDegreeOfParallelism = 10 } and asynchronous await calls",
+          "Description": "Refactors the code using Parallel.ForEachAsync with ParallelOptions { MaxDegreeOfParallelism = 10 } and await",
           "Weight": 50
         }
       ]
@@ -788,7 +788,7 @@
     {
       "Name": "I/O Performance: Synchronous File System Operations in Async Methods",
       "Category": "I/O Performance",
-      "Prompt": "Analyze the following method in a high-traffic Web API / Service processing configuration and data files:\n\npublic async Task<ProcessResult> ProcessCustomerDataAsync(string filePath) {\n    // ❌ Synchronous blocking disk read inside async flow\n    string jsonContent = File.ReadAllText(filePath);\n    \n    var result = await ProcessDataWithApiAsync(jsonContent);\n    \n    // ❌ Synchronous blocking disk write\n    File.WriteAllText(filePath, result.SerializedData);\n    return result;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the negative impact of calling synchronous File System methods ('File.ReadAllText', 'File.WriteAllText') on ThreadPool threads within async requests, causing Thread Starvation under high concurrency.\n2. Refactor the method replacing the calls with native asynchronous variants 'File.ReadAllTextAsync()' and 'File.WriteAllTextAsync()' with 'await'.",
+      "Prompt": "Analyze the following method in a high-traffic Web API / Service processing configuration and data files:\n\npublic async Task<ProcessResult> ProcessCustomerDataAsync(string filePath) {\n    // ❌ Synchronous blocking disk read inside async flow\n    string jsonContent = File.ReadAllText(filePath);\n    \n    var result = await ProcessDataWithApiAsync(jsonContent);\n    \n    // ❌ Synchronous blocking disk write\n    File.WriteAllText(filePath, result.SerializedData);\n    return result;\n}\n\nMANDATORY REQUIREMENTS:\n1. Explain the negative impact of calling synchronous File System methods ('File.ReadAllText', 'File.WriteAllText') on ThreadPool threads within async requests, causing Thread Starvation under high concurrency.\n2. MANDATORY: Refactor using the direct static methods 'File.ReadAllTextAsync()' and 'File.WriteAllTextAsync()'. Do NOT use manual FileStream, StreamReader, or StreamWriter wrappers.",
       "Criteria": [
         {
           "Description": "Explains that calling synchronous I/O operations in async methods blocks ThreadPool threads, causing Thread Starvation under high load",
@@ -928,7 +928,7 @@
     {
       "Name": "Minimal API: MapGroup with Endpoint Validation",
       "Category": "Minimal APIs & Source Generators",
-      "Prompt": "Analyze this API defining multiple CRUD routes for 'products':\n\nvar app = WebApplication.Create(args);\n\napp.MapGet(\"/api/products\", () => GetProducts());\napp.MapGet(\"/api/products/{id}\", (int id) => GetProductById(id));\napp.MapPost(\"/api/products\", (Product p) => CreateProduct(p));\napp.MapPut(\"/api/products/{id}\", (int id, Product p) => UpdateProduct(id, p));\napp.MapDelete(\"/api/products/{id}\", (int id) => DeleteProduct(id));\n\nMANDATORY REQUIREMENTS:\n1. Explain how 'MapGroup' in .NET 10 Minimal APIs reduces prefix duplication and improves route organization.\n2. Refactor using 'var products = app.MapGroup(\"/api/products\")' with FluentValidation or DataAnnotations validation.",
+      "Prompt": "Analyze this API defining multiple CRUD routes for 'products':\n\nvar app = WebApplication.Create(args);\n\napp.MapGet(\"/api/products\", () => GetProducts());\napp.MapGet(\"/api/products/{id}\", (int id) => GetProductById(id));\napp.MapPost(\"/api/products\", (Product p) => CreateProduct(p));\napp.MapPut(\"/api/products/{id}\", (int id, Product p) => UpdateProduct(id, p));\napp.MapDelete(\"/api/products/{id}\", (int id) => DeleteProduct(id));\n\nMANDATORY REQUIREMENTS:\n1. Explain how 'MapGroup' in .NET 10 Minimal APIs reduces prefix duplication and improves route organization.\n2. MANDATORY: Refactor using 'app.MapGroup(\"/api/products\")' and explicitly chain an endpoint filter using '.AddEndpointFilter()' or '.AddEndpointFilter(async (context, next) => ...)'.",
       "Criteria": [
         {
           "Description": "Explains that MapGroup reduces prefix duplication and enables centralized middleware and validation filters",
@@ -1120,10 +1120,10 @@
     {
       "Name": "String Concatenation and Heap Pressure",
       "Category": "Performance",
-      "Prompt": "Analyze the following method generating a plain text report from thousands of records:\npublic string GenerateReport(List<string> dataItems) {\n    string report = \"HEADER\\n\";\n    foreach (var item in dataItems) {\n        report += \"LOG: \" + item.Trim() + \" | STATUS: OK\\n\";\n    }\n    return report;\n}\nExplain the performance and memory allocation issue on the Heap (LOH / GC), and rewrite the method applying the best optimized alternative in C# .NET.",
+      "Prompt": "Analyze the following method generating a plain text report from thousands of records:\npublic string GenerateReport(List<string> dataItems) {\n    string report = \"HEADER\\n\";\n    foreach (var item in dataItems) {\n        report += \"LOG: \" + item.Trim() + \" | STATUS: OK\\n\";\n    }\n    return report;\n}\nExplain the performance and memory allocation issue on the Heap (reallocations/GC), and rewrite the method applying the best optimized alternative in C# .NET.",
       "Criteria": [
         {
-          "Description": "Explicitly explains System.String immutability and excessive Heap allocations in loops",
+          "Description": "Explains string immutability or excessive temporary heap allocations and GC pressure caused by repeated concatenation in loops",
           "Weight": 40
         },
         {

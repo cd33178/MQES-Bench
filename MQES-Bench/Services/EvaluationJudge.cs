@@ -69,7 +69,7 @@ public static class EvaluationJudge
 
                 var judgeOptions = new ChatCompletionOptions
                 {
-                    Temperature = 0.1f,
+                    Temperature = 0.0f,
                     TopP = 0.9f,
                     FrequencyPenalty = 0.0f,
                     PresencePenalty = 0.0f,

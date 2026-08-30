@@ -352,6 +352,8 @@ try
                   1. Be extremely precise with CLR runtime internals and exact database terminology (e.g., state machine heap allocations, lock types, memory layout).
                   2. Provide complete, production-ready, fully compiling code solutions without omitting key logic.
                   3. Structure responses concisely while covering deep architectural mechanics.
+
+                  CRITICAL: Keep your internal reasoning under 200 tokens. Do not explore multiple alternatives. Think concisely and output the solution immediately.
                   """);
 
         var userSuffix = !string.IsNullOrWhiteSpace(test.UserPromptSuffix)
