@@ -22,7 +22,7 @@ public static class ResponseSanitizer
             var match = Regex.Match(cleaned, @"to=self<\|message\|>[\s\S]*?(?:<\|eom\|><\|start\|>assistant to=user<\|message\|>|<\|start\|>assistant<\|message\|>|assistant to=user<\|message\|>)", RegexOptions.Compiled);
             if (match.Success)
             {
-                cleaned = cleaned.Substring(match.Index + match.Length).Trim();
+                cleaned = cleaned[(match.Index + match.Length)..].Trim();
             }
         }
 

@@ -22,7 +22,7 @@ var generatorApiKey = Environment.GetEnvironmentVariable("LLM_API_KEY") ?? "not-
 
 string? judgeEndpoint = null;                                                 // -je or --judge-endpoint: dedicated judge URL (e.g., Ollama)
 string? cliJudgeModel = null;                                                 // -jm or --judge-model: model name for judge
-string? cliJudgeApiKey = Environment.GetEnvironmentVariable("JUDGE_API_KEY"); // -jk or --judge-key: optional API key for judge
+var cliJudgeApiKey = Environment.GetEnvironmentVariable("JUDGE_API_KEY"); // -jk or --judge-key: optional API key for judge
 
 string? categoryFilterRaw = null;
 string? categoryContainsFilterRaw = null;
@@ -391,9 +391,8 @@ try
                 Seed = 42L
 #pragma warning restore OPENAI001
             };
-            options.StopSequences.Add("<|im_end|>");
-            options.StopSequences.Add("<|endoftext|>");
-            options.StopSequences.Add("<|eot|>");
+
+            ServerProbe.ConfigureStopSequences(options, serverMetadata.ModelFile);
 
             var sb = new StringBuilder(8192);
             var attemptTokens = 0;
@@ -586,4 +585,6 @@ if (results.Count > 0)
     }
 }
 
-Console.WriteLine($"Completed at {DateTime.Now:yyyy-MM-dd HH:mm:ss} (elapsed: {runSw.Elapsed:hh\\:mm\\:ss})\n");
+var elapsedStr = $"{(int)runSw.Elapsed.TotalHours:D2}:{runSw.Elapsed.Minutes:D2}:{runSw.Elapsed.Seconds:D2}";
+
+Console.WriteLine($"Completed at {DateTime.Now:yyyy-MM-dd HH:mm:ss} (elapsed: {elapsedStr})\n");

@@ -23,6 +23,10 @@ public static class MarkdownExporter
         var totalJudgeDuration = TimeSpan.FromTicks(results.Sum(r => r.JudgeDuration.Ticks));
         var totalActiveDuration = totalGenDuration + totalJudgeDuration;
 
+        var totalGenDurationStr = FormatDuration(totalGenDuration.TotalSeconds);
+        var totalJudgeDurationStr = FormatDuration(totalJudgeDuration.TotalSeconds);
+        var totalActiveDurationStr = FormatDuration(totalActiveDuration.TotalSeconds);
+
         var sb = new StringBuilder();
         sb.AppendLine("# LLM Benchmark Evaluation Report - llama-server (.NET 10 / C# 14)");
         sb.AppendLine($"**Execution Date:** {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
@@ -31,7 +35,7 @@ public static class MarkdownExporter
         sb.AppendLine($"**Evaluated Model:** `{meta.ModelFile}` ({meta.Quantization})");
         sb.AppendLine($"**Context Size:** `{meta.ContextSize:N0}` tokens");
         sb.AppendLine($"**Total Tests:** {results.Count}");
-        sb.AppendLine($"**Total Active Time:** {totalActiveDuration:hh\\:mm\\:ss} (Gen: {totalGenDuration:hh\\:mm\\:ss} | Judge: {totalJudgeDuration:hh\\:mm\\:ss})");
+        sb.AppendLine($"**Total Active Time:** {totalActiveDurationStr} (Gen: {totalGenDurationStr} | Judge: {totalJudgeDurationStr})");
         sb.AppendLine($"**Total Generated Tokens:** {totalTokens:N0} (Gen: {results.Sum(r => r.GenerationTokens):N0} | Judge: {results.Sum(r => r.JudgeTokens):N0})");
 
         if (evaluated.Count > 0)
@@ -157,5 +161,23 @@ public static class MarkdownExporter
         Console.ForegroundColor = ConsoleColor.Green;
         Console.WriteLine($"[EXPORT] Markdown report saved to: {Path.GetFullPath(filePath)}");
         Console.ResetColor();
+    }
+
+    /// <summary>
+    /// Formats elapsed seconds into an accurate, human-readable duration string.
+    /// Explicitly prepends days when total duration spans 24 hours or more (e.g., "1d 04:25:20")
+    /// to avoid standard TimeSpan 24-hour rollover truncation.
+    /// </summary>
+    /// <param name="totalSeconds">Total elapsed time expressed in seconds.</param>
+    /// <returns>A formatted duration string representation.</returns>
+    public static string FormatDuration(double totalSeconds)
+    {
+        var ts = TimeSpan.FromSeconds(totalSeconds);
+
+        // If duration exceeds 24 hours, display explicit days: "1d 04:25:20"
+        return ts.TotalDays >= 1 
+            ? $"{(int)ts.TotalDays}d {ts.Hours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+            : $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}"; // If duration is under 24 hours: "04:25:20"
+
     }
 }
