@@ -78,7 +78,7 @@ public static class ConsoleReporter
         Console.WriteLine("┌─ PERFORMANCE (LATENCY, TIMING & THROUGHPUT) ────────────────────────────────");
         Console.ResetColor();
         Console.WriteLine($"│ Total Tokens Generated : {totalToks:N0} (Gen: {testResults.Sum(r => r.GenerationTokens):N0} | Judge: {testResults.Sum(r => r.JudgeTokens):N0})");
-        Console.WriteLine($"│ Total Active Time      : {totalActiveDuration:hh\\:mm\\:ss} (Gen: {totalGenDuration:hh\\:mm\\:ss} | Judge: {totalJudgeDuration:hh\\:mm\\:ss})");
+        Console.WriteLine($"│ Total Active Time      : {FormatDuration(totalActiveDuration)} (Gen: {FormatDuration(totalGenDuration)} | Judge: {FormatDuration(totalJudgeDuration)})");
         Console.WriteLine($"│ Avg Time per Test      : {avgTotalDurationSec:F1}s (Gen: {avgGenDurationSec:F1}s | Judge: {avgJudgeDurationSec:F1}s)");
         Console.WriteLine($"│ Global Throughput      : {testResults.Count / safeMinutes:F2} req/min  ({totalToks / Math.Max(elapsed.TotalSeconds, 0.1):F1} tok/s global)");
         Console.WriteLine("│");
@@ -99,7 +99,7 @@ public static class ConsoleReporter
         Console.WriteLine($"│ │  P95: {MathStats.Percentile(e2ETimes, 95):F0} ms ({MathStats.Percentile(e2ETimes, 95) / 1000.0:F1} s)  │  P99: {MathStats.Percentile(e2ETimes, 99):F0} ms");
         Console.WriteLine("│ ╰─────────────────────────────────────────────────────────────────────────────");
         Console.WriteLine("│");
-        Console.WriteLine($"│ Total Wall-Clock Elapsed Time: {elapsed:hh\\:mm\\:ss}");
+        Console.WriteLine($"│ Total Wall-Clock Elapsed Time: {FormatDuration(elapsed)}");
         Console.WriteLine("└──────────────────────────────────────────────────────────────────────────────\n");
 
         // 3. Top 3 & Bottom 3
@@ -159,13 +159,13 @@ public static class ConsoleReporter
             .Where(g => g.Any(r => r.Score >= 0))
             .ToDictionary(g => g.Key, g => g.Where(r => r.Score >= 0).Average(r => r.EfficiencyScore));
 
-        var bestCatMqes  = categoryMqes.Count > 0 ? categoryMqes.Max(kv => kv.Value) : double.MaxValue;
+        var bestCatMqes = categoryMqes.Count > 0 ? categoryMqes.Max(kv => kv.Value) : double.MaxValue;
         var worstCatMqes = categoryMqes.Count > 0 ? categoryMqes.Min(kv => kv.Value) : double.MinValue;
 
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine("┌─ CATEGORY BREAKDOWN ──────────────────────────────────────────────────────────────────────────");
         Console.ResetColor();
-        Console.WriteLine($"│ {"Category",-38} {"Tests",5} {"Avg Q",7} {"MQES",7} {"Med t/s",8} {"Norm t/s",9} {"Pass",5} {"Fail",5}");
+        Console.WriteLine($"│ {"Category",-37} {"Tests",5} {"Avg Q",7} {"MQES",7} {"Med t/s",8} {"Norm t/s",9} {"Pass",4} {"Part",4} {"Fail",4}");
         Console.WriteLine($"├{new string('─', 95)}");
 
         foreach (var grp in categoryGroups)
@@ -176,40 +176,29 @@ public static class ConsoleReporter
             var avgMqesStr = avgMqesVal >= 0 ? $"{avgMqesVal:F1}" : "N/A";
             var medianSpeed = MathStats.Percentile(grp.Select(r => r.TokensPerSecond).OrderBy(x => x).ToArray(), 50);
             var avgNormSpeed = grp.Average(r => r.NormalizedTps);
+
             var pass = evalGrp.Count(r => r.Score == 100);
+            var part = evalGrp.Count(r => r.Score is > 0 and < 100);
             var fail = evalGrp.Count(r => r.Score == 0);
             var cat = MathStats.Truncate(grp.Key, 37);
 
-            Console.Write($"│ {cat,-38} {grp.Count(),5} {avgQualityStr,7} ");
+            Console.Write($"│ {cat,-37} {grp.Count(),5} {avgQualityStr,7} ");
 
             // Best category = bright green, worst = red; others by normal threshold
-            ConsoleColor mqesColor;
-            if (avgMqesVal >= 0 && Math.Abs(avgMqesVal - bestCatMqes) < 0.01)
+            var mqesColor = avgMqesVal switch
             {
-                mqesColor = ConsoleColor.Green;
-            }
-            else if (avgMqesVal >= 0 && Math.Abs(avgMqesVal - worstCatMqes) < 0.01)
-            {
-                mqesColor = ConsoleColor.Red;
-            }
-            else if (avgMqesVal >= 80)
-            {
-                mqesColor = ConsoleColor.Green;
-            }
-            else if (avgMqesVal >= 50)
-            {
-                mqesColor = ConsoleColor.Yellow;
-            }
-            else
-            {
-                mqesColor = avgMqesVal >= 0 ? ConsoleColor.DarkYellow : ConsoleColor.DarkGray;
-            }
+                >= 0 when Math.Abs(avgMqesVal - bestCatMqes) < 0.01 => ConsoleColor.Green,
+                >= 0 when Math.Abs(avgMqesVal - worstCatMqes) < 0.01 => ConsoleColor.Red,
+                >= 80 => ConsoleColor.Green,
+                >= 50 => ConsoleColor.Yellow,
+                _ => avgMqesVal >= 0 ? ConsoleColor.DarkYellow : ConsoleColor.DarkGray
+            };
 
             Console.ForegroundColor = mqesColor;
             Console.Write($"{avgMqesStr,7}");
             Console.ResetColor();
 
-            Console.WriteLine($" {medianSpeed,8:F1} {avgNormSpeed,9:F1} {pass,5} {fail,5}");
+            Console.WriteLine($" {medianSpeed,8:F1} {avgNormSpeed,9:F1} {pass,4} {part,4} {fail,4}");
         }
         Console.WriteLine($"└{new string('─', 95)}\n");
 
@@ -252,12 +241,13 @@ public static class ConsoleReporter
             return;
         }
 
-        // Compute pass rate per criterion (only criteria with >= 2 occurrences)
+        // Compute pass rate per criterion across all criteria
         var ranked = critStats
-            .Where(kv => kv.Value.Total >= 2)
-            .Select(kv => (Criterion: kv.Key, kv.Value.Total, kv.Value.Passed,
+            .Select(kv => (Criterion: kv.Key,
+                           kv.Value.Total,
+                           kv.Value.Passed,
+                           Failed: kv.Value.Total - kv.Value.Passed,
                            PassRate: kv.Value.Passed * 100.0 / kv.Value.Total))
-            .OrderBy(x => x.PassRate)
             .ToList();
 
         if (ranked.Count == 0)
@@ -268,13 +258,17 @@ public static class ConsoleReporter
         const int topN = 5;
 
         var worst = ranked
-            .Where(x => x.Passed < x.Total)
+            .Where(x => x.Failed > 0)
+            .OrderBy(x => x.PassRate)
+            .ThenByDescending(x => x.Failed)
+            .ThenByDescending(x => x.Total)
             .Take(topN)
             .ToList();
 
         var best = ranked
             .Where(x => x.Passed > 0)
             .OrderByDescending(x => x.PassRate)
+            .ThenByDescending(x => x.Passed)
             .ThenByDescending(x => x.Total)
             .Take(topN)
             .ToList();
@@ -290,14 +284,14 @@ public static class ConsoleReporter
         }
         else
         {
-            foreach (var (crit, total, passed, rate) in worst)
+            foreach (var item in worst)
             {
-                var bar = new string('█', (int)(rate / 5));
-                Console.Write($"│ {rate,5:F1}% ({passed}/{total})  ");
+                var bar = new string('█', (int)(item.PassRate / 5));
+                Console.Write($"│ {item.PassRate,5:F1}% ({item.Passed}/{item.Total})  ");
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.Write($"{bar,-20}");
                 Console.ResetColor();
-                Console.WriteLine($"  {crit}");
+                Console.WriteLine($"  {item.Criterion}");
             }
         }
         Console.WriteLine($"└{new string('─', 95)}\n");
@@ -313,14 +307,14 @@ public static class ConsoleReporter
         }
         else
         {
-            foreach (var (crit, total, passed, rate) in best)
+            foreach (var item in best)
             {
-                var bar = new string('█', (int)(rate / 5));
-                Console.Write($"│ {rate,5:F1}% ({passed}/{total})  ");
+                var bar = new string('█', (int)(item.PassRate / 5));
+                Console.Write($"│ {item.PassRate,5:F1}% ({item.Passed}/{item.Total})  ");
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.Write($"{bar,-20}");
                 Console.ResetColor();
-                Console.WriteLine($"  {crit}");
+                Console.WriteLine($"  {item.Criterion}");
             }
         }
         Console.WriteLine($"└{new string('─', 95)}\n");
@@ -370,6 +364,18 @@ public static class ConsoleReporter
             Console.ResetColor();
         }
         Console.WriteLine("└──────────────────────────────────────────────────────────────────────────────\n");
+    }
+
+    /// <summary>
+    /// Formats a duration in seconds, displaying days explicitly if >= 24 hours to prevent rollover truncation.
+    /// </summary>
+    private static string FormatDuration(TimeSpan ts)
+    {
+        if (ts.TotalDays >= 1)
+        {
+            return $"{(int)ts.TotalDays}d {ts.Hours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+        }
+        return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
     }
 
     public static void ListCategories(List<TestCase> tests)
