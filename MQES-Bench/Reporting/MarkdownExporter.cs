@@ -89,27 +89,58 @@ public static class MarkdownExporter
 
         var rankedCriteria = criterionStats
             .Where(kv => kv.Value.Total >= 2)
-            .Select(kv => (kv.Key, kv.Value.Total, kv.Value.Passed, Rate: kv.Value.Passed * 100.0 / kv.Value.Total))
+            .Select(kv => (Criterion: kv.Key, kv.Value.Total, kv.Value.Passed, Rate: kv.Value.Passed * 100.0 / kv.Value.Total))
             .OrderBy(x => x.Rate)
             .ToList();
 
         if (rankedCriteria.Count > 0)
         {
+            const int topN = 5;
+
+            var failedCriteria = rankedCriteria
+                .Where(x => x.Passed < x.Total)
+                .Take(topN)
+                .ToList();
+
+            var passedCriteria = rankedCriteria
+                .Where(x => x.Passed > 0)
+                .OrderByDescending(x => x.Rate)
+                .ThenByDescending(x => x.Total)
+                .Take(topN)
+                .ToList();
+
             sb.AppendLine("\n## Criteria Pass Rate Analysis\n");
+
             sb.AppendLine("### ❌ Most Commonly Failed Criteria\n");
-            sb.AppendLine("| Criterion | Pass Rate | Passed | Total |");
-            sb.AppendLine("|:---|:---:|:---:|:---:|");
-            foreach (var (crit, total, passed, rate) in rankedCriteria.Take(5))
+            if (failedCriteria.Count == 0)
             {
-                sb.AppendLine($"| {crit} | **{rate:F1}%** | {passed} | {total} |");
+                sb.AppendLine("*None — All evaluated criteria passed with 100% success.*\n");
+            }
+            else
+            {
+                sb.AppendLine("| Criterion | Pass Rate | Passed | Total |");
+                sb.AppendLine("|:---|:---:|:---:|:---:|");
+                foreach (var (crit, total, passed, rate) in failedCriteria)
+                {
+                    sb.AppendLine($"| {crit} | **{rate:F1}%** | {passed} | {total} |");
+                }
+                sb.AppendLine();
             }
 
-            sb.AppendLine("\n### ✅ Most Consistently Passed Criteria\n");
-            sb.AppendLine("| Criterion | Pass Rate | Passed | Total |");
-            sb.AppendLine("|:---|:---:|:---:|:---:|");
-            foreach (var (crit, total, passed, rate) in rankedCriteria.TakeLast(5).OrderByDescending(x => x.Rate))
+            sb.AppendLine("### ✅ Most Consistently Passed Criteria\n");
+            if (passedCriteria.Count == 0)
             {
-                sb.AppendLine($"| {crit} | **{rate:F1}%** | {passed} | {total} |");
+                sb.AppendLine("*None — No criteria passed.*\n");
+            }
+            else
+            {
+                sb.AppendLine("| Criterion | Pass Rate | Passed | Total |");
+                sb.AppendLine("|:---|:---:|:---:|:---:|");
+                foreach (var (crit, total, passed, rate) in passedCriteria)
+                {
+                    sb.AppendLine($"| {crit} | **{rate:F1}%** | {passed} | {total} |");
+                }
+                sb.AppendLine();
             }
         }
 
@@ -170,12 +201,12 @@ public static class MarkdownExporter
     /// </summary>
     /// <param name="totalSeconds">Total elapsed time expressed in seconds.</param>
     /// <returns>A formatted duration string representation.</returns>
-    public static string FormatDuration(double totalSeconds)
+    private static string FormatDuration(double totalSeconds)
     {
         var ts = TimeSpan.FromSeconds(totalSeconds);
 
         // If duration exceeds 24 hours, display explicit days: "1d 04:25:20"
-        return ts.TotalDays >= 1 
+        return ts.TotalDays >= 1
             ? $"{(int)ts.TotalDays}d {ts.Hours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}"
             : $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}"; // If duration is under 24 hours: "04:25:20"
 

@@ -234,15 +234,14 @@ public static class ConsoleReporter
 
         foreach (var result in evaluated)
         {
-            foreach (var c in result.PassedCriteria)
+            foreach (var key in result.PassedCriteria.Select(c => MathStats.Truncate(c, 70)))
             {
-                var key = MathStats.Truncate(c, 70);
                 critStats.TryGetValue(key, out var existing);
                 critStats[key] = (existing.Total + 1, existing.Passed + 1);
             }
-            foreach (var c in result.FailedCriteria)
+
+            foreach (var key in result.FailedCriteria.Select(c => MathStats.Truncate(c, 70)))
             {
-                var key = MathStats.Truncate(c, 70);
                 critStats.TryGetValue(key, out var existing);
                 critStats[key] = (existing.Total + 1, existing.Passed);
             }
@@ -267,39 +266,67 @@ public static class ConsoleReporter
         }
 
         const int topN = 5;
-        var worst = ranked.Take(topN).ToList();
-        var best  = ranked.TakeLast(topN).OrderByDescending(x => x.PassRate).ToList();
 
+        var worst = ranked
+            .Where(x => x.Passed < x.Total)
+            .Take(topN)
+            .ToList();
+
+        var best = ranked
+            .Where(x => x.Passed > 0)
+            .OrderByDescending(x => x.PassRate)
+            .ThenByDescending(x => x.Total)
+            .Take(topN)
+            .ToList();
+
+        // ── TOP MOST FAILED CRITERIA ─────────────────────────────────────────────
         Console.ForegroundColor = ConsoleColor.Red;
         Console.WriteLine($"┌─ TOP {topN} MOST FAILED CRITERIA ──────────────────────────────────────────────────────────────");
         Console.ResetColor();
-        foreach (var (crit, total, passed, rate) in worst)
+
+        if (worst.Count == 0)
         {
-            var bar = new string('█', (int)(rate / 5));
-            Console.Write($"│ {rate,5:F1}% ({passed}/{total})  ");
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.Write($"{bar,-20}");
-            Console.ResetColor();
-            Console.WriteLine($"  {crit}");
+            Console.WriteLine("│ (None — All evaluated criteria passed with 100% success)");
+        }
+        else
+        {
+            foreach (var (crit, total, passed, rate) in worst)
+            {
+                var bar = new string('█', (int)(rate / 5));
+                Console.Write($"│ {rate,5:F1}% ({passed}/{total})  ");
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.Write($"{bar,-20}");
+                Console.ResetColor();
+                Console.WriteLine($"  {crit}");
+            }
         }
         Console.WriteLine($"└{new string('─', 95)}\n");
 
+        // ── TOP MOST CONSISTENTLY PASSED CRITERIA ────────────────────────────────
         Console.ForegroundColor = ConsoleColor.Green;
         Console.WriteLine($"┌─ TOP {topN} MOST CONSISTENTLY PASSED CRITERIA ──────────────────────────────────────────────────");
         Console.ResetColor();
-        foreach (var (crit, total, passed, rate) in best)
+
+        if (best.Count == 0)
         {
-            var bar = new string('█', (int)(rate / 5));
-            Console.Write($"│ {rate,5:F1}% ({passed}/{total})  ");
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.Write($"{bar,-20}");
-            Console.ResetColor();
-            Console.WriteLine($"  {crit}");
+            Console.WriteLine("│ (None — No criteria passed)");
+        }
+        else
+        {
+            foreach (var (crit, total, passed, rate) in best)
+            {
+                var bar = new string('█', (int)(rate / 5));
+                Console.Write($"│ {rate,5:F1}% ({passed}/{total})  ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write($"{bar,-20}");
+                Console.ResetColor();
+                Console.WriteLine($"  {crit}");
+            }
         }
         Console.WriteLine($"└{new string('─', 95)}\n");
     }
 
-    public static void PrintScoreDistribution(double[] scores)
+    private static void PrintScoreDistribution(double[] scores)
     {
         if (scores.Length == 0)
         {
