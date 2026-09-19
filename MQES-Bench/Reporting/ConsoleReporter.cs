@@ -286,7 +286,10 @@ public static class ConsoleReporter
         {
             foreach (var item in worst)
             {
-                var bar = new string('█', (int)(item.PassRate / 5));
+                var failRate = 100.0 - item.PassRate;
+                var barLength = (int)Math.Round(failRate / 5.0);
+                var bar = new string('█', Math.Clamp(barLength, 0, 20));
+
                 Console.Write($"│ {item.PassRate,5:F1}% ({item.Passed}/{item.Total})  ");
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.Write($"{bar,-20}");
@@ -309,7 +312,9 @@ public static class ConsoleReporter
         {
             foreach (var item in best)
             {
-                var bar = new string('█', (int)(item.PassRate / 5));
+                var barLength = (int)Math.Round(item.PassRate / 5.0);
+                var bar = new string('█', Math.Clamp(barLength, 0, 20));
+
                 Console.Write($"│ {item.PassRate,5:F1}% ({item.Passed}/{item.Total})  ");
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.Write($"{bar,-20}");
@@ -371,11 +376,9 @@ public static class ConsoleReporter
     /// </summary>
     private static string FormatDuration(TimeSpan ts)
     {
-        if (ts.TotalDays >= 1)
-        {
-            return $"{(int)ts.TotalDays}d {ts.Hours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
-        }
-        return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+        return ts.TotalDays >= 1
+            ? $"{(int)ts.TotalDays}d {ts.Hours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+            : $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
     }
 
     public static void ListCategories(List<TestCase> tests)
