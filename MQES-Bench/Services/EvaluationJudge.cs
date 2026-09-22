@@ -27,6 +27,7 @@ public static class EvaluationJudge
         string? defaultSuiteJudgePrompt,
         string rawResponse,
         ChatClient judgeClient,
+        int judgeMaxTokens,
         CancellationToken ct = default)
     {
         var judgeSw = Stopwatch.StartNew();
@@ -61,7 +62,7 @@ public static class EvaluationJudge
 
             var isPassed = false;
             const int maxRetries = 3;
-            var currentMaxTokens = 800;
+            var currentMaxTokens = judgeMaxTokens;
 
             for (var attempt = 1; attempt <= maxRetries; attempt++)
             {

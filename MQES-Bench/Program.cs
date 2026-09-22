@@ -1,15 +1,15 @@
-﻿using System.ClientModel;
-using System.ClientModel.Primitives;
-using System.Diagnostics;
-using System.Runtime;
-using System.Text;
-using MQESBench;
+﻿using MQESBench;
 using MQESBench.Models;
 using MQESBench.Reporting;
 using MQESBench.Scoring;
 using MQESBench.Services;
 using OpenAI;
 using OpenAI.Chat;
+using System.ClientModel;
+using System.ClientModel.Primitives;
+using System.Diagnostics;
+using System.Runtime;
+using System.Text;
 
 // ============================================================================
 // 1. CLI Parameter Parsing & Options Configuration
@@ -35,6 +35,7 @@ var costPerKwh = 0.15;
 var requestTimeout = TimeSpan.FromMinutes(30);                        // -t or --timeout: Candidate generation timeout (default: 30m)
 TimeSpan? cliJudgeTimeout = null;                                             // -jt or --judge-timeout: Dedicated judge timeout override
 var completedAll = false;
+var judgeMaxTokens = 1024;
 
 int? maxOutputTokens = null;
 float? cliTemperature = null;
@@ -123,6 +124,19 @@ for (var i = 0; i < args.Length; i++)
             if (float.TryParse(args[++i], System.Globalization.CultureInfo.InvariantCulture, out var topP))
             {
                 cliTopP = topP;
+            }
+            break;
+        case "-jtk" or "--judge-tokens":
+            if (i + 1 < args.Length && int.TryParse(args[++i], out var judgeTokens) && judgeTokens > 0)
+            {
+                judgeMaxTokens = judgeTokens;
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("[ERROR] Missing or invalid integer value for --judge-tokens.");
+                Console.ResetColor();
+                return;
             }
             break;
         case "--help" or "-h" or "-?":
@@ -517,7 +531,7 @@ try
             {
                 // Evaluates using the dedicated judge client (Ollama, local llama-server, etc.)
                 var (score, passed, failed, judgeTokens, cleanCode, judgeDuration) =
-                    await EvaluationJudge.EvaluateResponseAsync(test, suiteContainer.DefaultJudgeSystemPrompt, fullResponse, judgeChatClient, cts.Token);
+                    await EvaluationJudge.EvaluateResponseAsync(test, suiteContainer.DefaultJudgeSystemPrompt, fullResponse, judgeChatClient, judgeMaxTokens, cts.Token);
 
                 var totalTokens = totalGenTokens + judgeTokens;
                 var metrics = SystemTelemetry.ComputeMetrics(snapshot, totalTokens, costPerKwh);
@@ -587,4 +601,4 @@ if (results.Count > 0)
 
 var elapsedStr = $"{(int)runSw.Elapsed.TotalHours:D2}:{runSw.Elapsed.Minutes:D2}:{runSw.Elapsed.Seconds:D2}";
 
-Console.WriteLine($"Completed at {DateTime.Now:yyyy-MM-dd HH:mm:ss} (elapsed: {elapsedStr})\n");
+Console.WriteLine($"Completed at {DateTime.Now:yyyy-MM-dd HH:mm:ss} (elapsed: {elapsedStr})\n"); 

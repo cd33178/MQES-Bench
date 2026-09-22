@@ -429,7 +429,8 @@ public static class ConsoleReporter
           -jm, --judge-model <model-name>      Model identifier for the Judge (default: llama-server).
           -jk, --judge-key <api-key>           API key for Judge endpoint (default: inherits generator key, or env JUDGE_API_KEY).
           -jt, --judge-timeout <seconds>       Dedicated Judge timeout (default: matches generation timeout).
-
+          -jtk, --judge-tokens <number>        Maximum output token generation limit for Judge (default: 1024).
+        
         Usage examples:
           mqes-bench csharp_suite.json
           mqes-bench csharp_suite.json -t 600 -jt 180
