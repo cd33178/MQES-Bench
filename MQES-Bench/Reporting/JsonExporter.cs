@@ -110,7 +110,7 @@ public static class JsonExporter
                     AverageWatts = Math.Round(results.Average(r => r.Metrics.EstimatedWatts), 1),
                     TotalKWh = Math.Round(totalKWh, 5),
                     TotalCostUsd = Math.Round(totalCost, 4),
-                    JoulesPerToken = Math.Round(totalToks > 0 ? (totalKWh * 3_600_000.0) / totalToks : 0, 2),
+                    JoulesPerToken = Math.Round(totalToks > 0 ? totalKWh * 3_600_000.0 / totalToks : 0, 2),
                     TokensPerWattHour = Math.Round(totalKWh > 0 ? totalToks / (totalKWh * 1000.0) : 0, 1)
                 },
                 // Global pass rate per criterion (only criteria with >= 2 occurrences).

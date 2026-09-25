@@ -56,7 +56,7 @@ public static class MarkdownExporter
 
         foreach (var r in results)
         {
-            var status = r.Score < 0 ? "N/A" : (r.Score == 100 ? "✅ PASS" : (r.Score == 0 ? "❌ FAIL" : "⚠️ PARTIAL"));
+            var status = r.Score < 0 ? "N/A" : r.Score == 100 ? "✅ PASS" : r.Score == 0 ? "❌ FAIL" : "⚠️ PARTIAL";
             var qStr = r.Score < 0 ? "N/A" : $"{r.Score}/100";
             var mqesStr = r.Score < 0 ? "N/A" : $"{r.EfficiencyScore:F1}";
             var timeStr = $"{r.TotalDuration.TotalSeconds:F1}s ({r.GenerationDuration.TotalSeconds:F1}s/{r.JudgeDuration.TotalSeconds:F1}s)";

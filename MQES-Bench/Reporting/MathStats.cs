@@ -56,7 +56,7 @@ public static class MathStats
             return sorted[0];
         }
 
-        var index = (p / 100.0) * (sorted.Length - 1);
+        var index = p / 100.0 * (sorted.Length - 1);
         var lower = (int)index;
         var upper = Math.Min(lower + 1, sorted.Length - 1);
         var frac = index - lower;

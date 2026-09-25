@@ -28,8 +28,8 @@ public sealed record HardwarePowerProfile(
     /// </summary>
     public double HardwareCapacityFactor =>
         IsLaptop
-            ? (GpuActiveWatts > 0 ? 2.5 : 0.6)
-            : (EstimatedDimms >= 4 || PlatformType.Contains("HEDT", StringComparison.OrdinalIgnoreCase) ? 1.0 : 0.8);
+            ? GpuActiveWatts > 0 ? 2.5 : 0.6
+            : EstimatedDimms >= 4 || PlatformType.Contains("HEDT", StringComparison.OrdinalIgnoreCase) ? 1.0 : 0.8;
 }
 
 /// <summary>

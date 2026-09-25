@@ -125,14 +125,14 @@ public static partial class SystemTelemetry
             _ => 2
         };
 
-        var ramMaxWatts = isLaptop ? (estimatedDimms * 3.5) : (estimatedDimms * 4.5);
+        var ramMaxWatts = isLaptop ? estimatedDimms * 3.5 : estimatedDimms * 4.5;
 
         // 4. GPU Offload Detection (Defaults to 50W if running hybrid inference on Laptop)
         var gpuActiveWatts = isLaptop ? 50.0 : 0.0;
 
         return new HardwarePowerProfile(
             IsLaptop: isLaptop,
-            PlatformType: isLaptop ? "Laptop / Mobile" : (logicalCores >= 32 ? "Desktop HEDT (High-End)" : "Desktop Standard"),
+            PlatformType: isLaptop ? "Laptop / Mobile" : logicalCores >= 32 ? "Desktop HEDT (High-End)" : "Desktop Standard",
             CpuName: cpuName,
             LogicalCores: logicalCores,
             TotalRamGb: totalRamGb,
@@ -214,7 +214,7 @@ public static partial class SystemTelemetry
         var safeElapsed = Math.Max(elapsedSeconds, 0.001);
         var cpuDeltaMs = (proc.TotalProcessorTime - startSnapshot.CpuTime).TotalMilliseconds;
 
-        var cpuPercent = (cpuDeltaMs / (safeElapsed * 1000.0 * Environment.ProcessorCount)) * 100.0;
+        var cpuPercent = cpuDeltaMs / (safeElapsed * 1000.0 * Environment.ProcessorCount) * 100.0;
         var workingSetMb = proc.WorkingSet64 / (1024.0 * 1024.0);
         var managedHeapMb = GC.GetTotalMemory(forceFullCollection: false) / (1024.0 * 1024.0);
         var sysMem = GetSystemMemoryInfo();
@@ -229,13 +229,13 @@ public static partial class SystemTelemetry
         var cpuWatts = profile.CpuIdleWatts +
                        (profile.CpuMaxWatts - profile.CpuIdleWatts) * loadFactor * profile.InstructionMultiplier;
 
-        var ramWatts = (profile.RamMaxWatts * 0.3) + (profile.RamMaxWatts * 0.7 * loadFactor);
+        var ramWatts = profile.RamMaxWatts * 0.3 + profile.RamMaxWatts * 0.7 * loadFactor;
 
         // Total estimated wall power including motherboard, active GPU, and PSU efficiency
         var totalSystemWatts = (cpuWatts + ramWatts + profile.GpuActiveWatts + profile.MoboBaseWatts) / profile.PsuEfficiency;
 
         // Cumulative energy and monetary cost
-        var kWh = (totalSystemWatts * safeElapsed) / (3600.0 * 1000.0);
+        var kWh = totalSystemWatts * safeElapsed / (3600.0 * 1000.0);
         var costUsd = kWh * costPerKwh;
 
         return new TestResourceMetrics(

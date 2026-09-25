@@ -10,7 +10,7 @@ namespace MQESBench.Reporting;
 /// </summary>
 public static class ConsoleReporter
 {
-    public static void PrintEnhancedSummaryReport(List<TestResult> testResults, TimeSpan elapsed)
+    public static void PrintEnhancedSummaryReport(List<TestResult> testResults, ModelAgentCapabilities capabilities, TimeSpan elapsed)
     {
         if (testResults.Count == 0)
         {
@@ -59,7 +59,7 @@ public static class ConsoleReporter
         // 2. Performance Statistics
         var ttfts = testResults.Select(r => r.TTFTMs).OrderBy(x => x).ToArray();
         var genSpeeds = testResults.Select(r => r.TokensPerSecond).OrderBy(x => x).ToArray();
-        var e2ETimes = testResults.Select(r => r.TTFTMs + (r.TokenCount / Math.Max(r.TokensPerSecond, 0.01) * 1000)).OrderBy(x => x).ToArray();
+        var e2ETimes = testResults.Select(r => r.TTFTMs + r.TokenCount / Math.Max(r.TokensPerSecond, 0.01) * 1000).OrderBy(x => x).ToArray();
         var totalToks = testResults.Sum(r => r.TokenCount);
 
         var ttftStdDev = MathStats.CalculateStdDev(ttfts);
@@ -102,7 +102,39 @@ public static class ConsoleReporter
         Console.WriteLine($"│ Total Wall-Clock Elapsed Time: {FormatDuration(elapsed)}");
         Console.WriteLine("└──────────────────────────────────────────────────────────────────────────────\n");
 
-        // 3. Top 3 & Bottom 3
+        // 3. Capabilities report
+        Console.ForegroundColor = ConsoleColor.DarkCyan;
+        Console.WriteLine("┌─ AGENT & TOOL COMPATIBILITY AUDIT (Aider / OpenCode) ──────────────────────");
+        Console.ResetColor();
+
+        var toolsColor = capabilities.SupportsTools ? ConsoleColor.Green : ConsoleColor.Red;
+        var toolsStatus = capabilities.SupportsTools ? "YES (Native Jinja Function Calling)" : "NO (Plain code only)";
+
+        Console.WriteLine($"│ Chat Template Family  : {capabilities.TemplateFamily}");
+        Console.Write("│ Tool Calling Support  : ");
+        Console.ForegroundColor = toolsColor;
+        Console.WriteLine(toolsStatus);
+        Console.ResetColor();
+
+        Console.WriteLine($"│ Inferred Tool Syntax  : {capabilities.ToolCallSyntax}");
+
+        Console.Write("│ OpenCode Ready        : ");
+        Console.ForegroundColor = capabilities.OpenCodeCompatible ? ConsoleColor.Green : ConsoleColor.Yellow;
+        Console.WriteLine(capabilities.OpenCodeCompatible ? "READY (Standard <tool_call> schema)" : "RISK (May fail tool parser regex)");
+        Console.ResetColor();
+
+        Console.Write("│ Aider Ready           : ");
+        Console.ForegroundColor = capabilities.AiderCompatible ? ConsoleColor.Green : ConsoleColor.Yellow;
+        Console.WriteLine(capabilities.AiderCompatible ? "READY (Supports diff/whole and chat template)" : "LIMITED (Use --edit-format whole)");
+        Console.ResetColor();
+
+        if (capabilities.StopTokens.Count > 0)
+        {
+            Console.WriteLine($"│ Active Stop Tokens    : {string.Join(", ", capabilities.StopTokens)}");
+        }
+        Console.WriteLine("└──────────────────────────────────────────────────────────────────────────────\n");
+
+        // 4. Top 3 & Bottom 3
         var top3Speed = testResults.OrderByDescending(r => r.TokensPerSecond).Take(3).ToList();
         var bottom3Speed = testResults.OrderBy(r => r.TokensPerSecond).Take(3).ToList();
 
@@ -124,7 +156,7 @@ public static class ConsoleReporter
         }
         Console.WriteLine("└──────────────────────────────────────────────────────────────────────────────\n");
 
-        // 4. Resource Efficiency & Telemetry
+        // 5. Resource Efficiency & Telemetry
         var avgCpu = testResults.Average(r => r.Metrics.ProcessCpuPct);
         var avgRam = testResults.Average(r => r.Metrics.ProcessWorkingSetMb);
         var peakRam = testResults.Max(r => r.Metrics.ProcessWorkingSetMb);
@@ -135,7 +167,7 @@ public static class ConsoleReporter
         var totalCost = testResults.Sum(r => r.Metrics.CostUsd);
         var avgWatts = testResults.Average(r => r.Metrics.EstimatedWatts);
 
-        var joulesPerToken = totalToks > 0 ? (totalKWh * 3_600_000.0) / totalToks : 0.0;
+        var joulesPerToken = totalToks > 0 ? totalKWh * 3_600_000.0 / totalToks : 0.0;
         var tokensPerWattHour = totalKWh > 0 ? totalToks / (totalKWh * 1000.0) : 0.0;
 
         Console.ForegroundColor = ConsoleColor.Yellow;
@@ -153,7 +185,7 @@ public static class ConsoleReporter
         Console.WriteLine($"│ GC Total Collections   : Gen0: {testResults.Sum(r => r.Metrics.Gen0Collections)} │ Gen1: {testResults.Sum(r => r.Metrics.Gen1Collections)} │ Gen2: {testResults.Sum(r => r.Metrics.Gen2Collections)}");
         Console.WriteLine("└──────────────────────────────────────────────────────────────────────────────\n");
 
-        // 5. Category breakdown with visual highlighting for best/worst MQES performance
+        // 6. Category breakdown with visual highlighting for best/worst MQES performance
         var categoryGroups = testResults.GroupBy(r => r.Test.Category).OrderBy(g => g.Key).ToList();
         var categoryMqes = categoryGroups
             .Where(g => g.Any(r => r.Score >= 0))
@@ -202,7 +234,7 @@ public static class ConsoleReporter
         }
         Console.WriteLine($"└{new string('─', 95)}\n");
 
-        // 6. Criteria analysis: most frequently failed and most consistently passed
+        // 7. Criteria analysis: most frequently failed and most consistently passed
         PrintCriteriaAnalysis(testResults);
     }
 
@@ -398,6 +430,103 @@ public static class ConsoleReporter
         Console.WriteLine($"  - ALL ({totalCount}) {new string(' ', Math.Max(0, maxLen - 6 - totalCount.ToString().Length))}(Runs all test cases)");
     }
 
+    /// <summary>
+    /// Renders a dedicated technical inspection report displaying architecture, context limits,
+    /// server parameters, Jinja template properties, and agent readiness.
+    /// </summary>
+    public static void PrintModelInspectionReport(string endpoint, ServerMetadata meta, ModelAgentCapabilities caps)
+    {
+        Console.OutputEncoding = Encoding.UTF8;
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"\n{new string('═', 80)}");
+        Console.WriteLine("   LLM INFERENCE & ARCHITECTURAL INSPECTION REPORT");
+        Console.WriteLine(new string('═', 80));
+        Console.ResetColor();
+
+        Console.WriteLine($"  Endpoint       : {endpoint}");
+        Console.WriteLine($"  Model File     : {meta.ModelFile}");
+        Console.WriteLine($"  Quantization   : {meta.Quantization}");
+        Console.WriteLine($"  Host Target    : {meta.Hardware}");
+        Console.WriteLine(new string('─', 80));
+
+        // 1. GGUF Architecture
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("┌─ GGUF MODEL ARCHITECTURE ─────────────────────────────────────────────────────");
+        Console.ResetColor();
+        var layersStr = meta.LayerCount > 0 ? $"{meta.LayerCount} layers" : "N/A (Derived at runtime)";
+        var embdStr = meta.EmbeddingDimension > 0 ? $"{meta.EmbeddingDimension} dims" : "N/A";
+        var vocabStr = meta.VocabularySize > 0 ? $"{meta.VocabularySize:N0} tokens" : "N/A";
+        var gqaStr = meta.AttentionHeads > 0
+            ? $"{meta.AttentionHeads} Q-heads / {meta.KeyValueHeads} KV-heads (Ratio: {meta.GqaRatio:F1}x)"
+            : "N/A";
+
+        Console.WriteLine($"│ Transformer Layers : {layersStr}");
+        Console.WriteLine($"│ Embedding Dim      : {embdStr}");
+        Console.WriteLine($"│ Vocabulary Size    : {vocabStr}");
+        Console.WriteLine($"│ Attention / GQA    : {gqaStr}");
+        Console.WriteLine("└───────────────────────────────────────────────────────────────────────────────\n");
+
+        // 2. Context Window & Server Slots
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("┌─ CONTEXT WINDOW & CONCURRENCY CAPACITY ───────────────────────────────────────");
+        Console.ResetColor();
+        var trainCtxStr = meta.TrainingContextSize > 0 ? $"{meta.TrainingContextSize:N0} tokens (Native max)" : "Unspecified in meta";
+        var maxPredictStr = meta.MaxPredictTokens > 0 ? $"{meta.MaxPredictTokens:N0} tokens" : "Unlimited / Unconstrained";
+
+        Console.WriteLine($"│ Active Runtime Ctx : {meta.ContextSize:N0} tokens (-c / n_ctx)");
+        Console.WriteLine($"│ Model Training Ctx : {trainCtxStr}");
+        Console.WriteLine($"│ Max Predict Limit  : {maxPredictStr} (-n / n_predict)");
+        Console.WriteLine($"│ Concurrent Slots   : {meta.TotalSlots} parallel slot(s) (-np)");
+        Console.WriteLine("└───────────────────────────────────────────────────────────────────────────────\n");
+
+        // 3. Server Sampler Defaults
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("┌─ SERVER-SIDE SAMPLER CONFIGURATION (llama-server defaults) ───────────────────");
+        Console.ResetColor();
+        var sTemp = meta.ServerTemperature >= 0 ? $"{meta.ServerTemperature:F2}" : "Client controlled";
+        var sMinP = meta.ServerMinP >= 0 ? $"{meta.ServerMinP:F2}" : "Disabled / Default";
+        var sRepP = meta.ServerRepeatPenalty >= 0 ? $"{meta.ServerRepeatPenalty:F2} (Last {meta.ServerRepeatLastN} tokens)" : "Default";
+
+        Console.WriteLine($"│ Server Temperature : {sTemp}");
+        Console.WriteLine($"│ Server Min-P       : {sMinP}");
+        Console.WriteLine($"│ Repeat Penalty     : {sRepP}");
+        Console.WriteLine("└───────────────────────────────────────────────────────────────────────────────\n");
+
+        // 4. Tokenizer, Jinja Template & Agent Compatibility
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("┌─ TOKENIZER, JINJA TEMPLATE & AGENT COMPATIBILITY ─────────────────────────────");
+        Console.ResetColor();
+        var toolColor = caps.SupportsTools ? ConsoleColor.Green : ConsoleColor.Red;
+        var toolStatus = caps.SupportsTools ? "YES (Native Jinja Function Calling)" : "NO (Plain completions only)";
+
+        Console.WriteLine($"│ Template Family    : {caps.TemplateFamily}");
+        Console.Write("│ Tool Calling Logic : ");
+        Console.ForegroundColor = toolColor;
+        Console.WriteLine(toolStatus);
+        Console.ResetColor();
+        Console.WriteLine($"│ Inferred Syntax    : {caps.ToolCallSyntax}");
+        Console.WriteLine($"│ Active Stop Tokens : {(caps.StopTokens.Count > 0 ? string.Join(", ", caps.StopTokens) : "None registered")}");
+        Console.WriteLine("├───────────────────────────────────────────────────────────────────────────────");
+
+        foreach (var agent in caps.Agents)
+        {
+            var statusColor = agent.Status switch
+            {
+                "READY" => ConsoleColor.Green,
+                "LIMITED" or "BASIC" => ConsoleColor.Yellow,
+                _ => ConsoleColor.Red
+            };
+
+            Console.Write($"│ {$"{agent.Name} Agent",-18} : ");
+            Console.ForegroundColor = statusColor;
+            Console.Write($"{agent.Status,-12}");
+            Console.ResetColor();
+            Console.WriteLine($"│ {agent.Details}");
+        }
+        Console.WriteLine($"└{new string('─', 79)}\n");
+    }
+
     public static void ShowHelp()
     {
         Console.WriteLine("""
@@ -405,6 +534,7 @@ public static class ConsoleReporter
           mqes-bench [suite.json] [options]
 
         General & Filtering Options:
+          -i,  --info, --inspect               Inspect server model architecture, capabilities and exit.
           -c,  --category <cat1,cat2>          Filter by EXACT match on Category property.
           -cc, --category-contains <t1,t2>     Filter by PARTIAL match on Category or Name.
           -ck, --cost-kwh <rate>               Electricity price per kWh in USD for power telemetry (default: 0.15).

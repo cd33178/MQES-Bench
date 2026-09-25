@@ -3,18 +3,30 @@
 /// <summary>
 /// LLM server metadata automatically detected at benchmark startup.
 /// Populated by <c>ServerProbe</c> by querying the server's REST endpoints.
+/// Contains low-level architecture, runtime context, and generation parameters
+/// extracted directly from the inference server.
 /// </summary>
-public sealed record ServerMetadata
+public sealed class ServerMetadata
 {
-    /// <summary>GGUF filename or model identifier currently loaded on the server.</summary>
-    public string ModelFile { get; set; } = "llama-server";
-
-    /// <summary>Detected quantization scheme (e.g., Q4_K_M, Q8_0, F16).</summary>
+    public string ModelFile { get; set; } = "Unknown";
     public string Quantization { get; set; } = "Unknown";
-
-    /// <summary>Host hardware description (hostname, core count, OS).</summary>
+    public int ContextSize { get; set; } = 4096;
     public string Hardware { get; set; } = "Local Host";
 
-    /// <summary>Active context window size in tokens (n_ctx).</summary>
-    public int ContextSize { get; set; } = 16384;
+    // Architecture metadata from GGUF /v1/models meta block
+    public int TrainingContextSize { get; set; }
+    public int VocabularySize { get; set; }
+    public int LayerCount { get; set; }
+    public int EmbeddingDimension { get; set; }
+    public int AttentionHeads { get; set; }
+    public int KeyValueHeads { get; set; }
+    public double GqaRatio => KeyValueHeads > 0 ? (double)AttentionHeads / KeyValueHeads : 1.0;
+
+    // Runtime slot and generation settings from /props
+    public int TotalSlots { get; set; } = 1;
+    public int MaxPredictTokens { get; set; }
+    public double ServerTemperature { get; set; } = -1;
+    public double ServerMinP { get; set; } = -1;
+    public double ServerRepeatPenalty { get; set; } = -1;
+    public int ServerRepeatLastN { get; set; } = -1;
 }

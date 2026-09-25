@@ -20,8 +20,8 @@ var endpoint = "http://localhost:8080/v1";
 string? cliGeneratorModel = null;
 var generatorApiKey = Environment.GetEnvironmentVariable("LLM_API_KEY") ?? "not-needed"; // -ak or --api-key
 
-string? judgeEndpoint = null;                                                 // -je or --judge-endpoint: dedicated judge URL (e.g., Ollama)
-string? cliJudgeModel = null;                                                 // -jm or --judge-model: model name for judge
+string? judgeEndpoint = null;                                                    // -je or --judge-endpoint: dedicated judge URL (e.g., Ollama)
+string? cliJudgeModel = null;                                                    // -jm or --judge-model: model name for judge
 var cliJudgeApiKey = Environment.GetEnvironmentVariable("JUDGE_API_KEY"); // -jk or --judge-key: optional API key for judge
 
 string? categoryFilterRaw = null;
@@ -40,6 +40,8 @@ var judgeMaxTokens = 1024;
 int? maxOutputTokens = null;
 float? cliTemperature = null;
 float? cliTopP = null;
+
+var inspectOnly = false;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -139,6 +141,11 @@ for (var i = 0; i < args.Length; i++)
                 return;
             }
             break;
+        case "-i":
+        case "--info":
+        case "--inspect":
+            inspectOnly = true;
+            break;
         case "--help" or "-h" or "-?":
             ConsoleReporter.ShowHelp();
             return;
@@ -171,15 +178,26 @@ var effectiveJudgeTimeout = cliJudgeTimeout ?? requestTimeout;
 // ============================================================================
 // 2. Hardware Profiling & Parameter Auto-Tuning
 // ============================================================================
+
 var serverMetadata = await ServerProbe.GetServerMetadataAsync(endpoint);
+var capabilities = await ServerProbe.InspectModelCapabilitiesAsync(endpoint);
+if (inspectOnly)
+{
+    var meta = await ServerProbe.GetServerMetadataAsync(endpoint, generatorApiKey);
+    var caps = await ServerProbe.InspectModelCapabilitiesAsync(endpoint, generatorApiKey);
+
+    ConsoleReporter.PrintModelInspectionReport(endpoint, meta, caps);
+    return;
+}
+
 var profile = SystemTelemetry.CurrentProfile;
 
 // Resolve Effective Generator Model Identifier: CLI override -> ServerProbe probed ID -> default fallback
 var effectiveGeneratorModel = !string.IsNullOrWhiteSpace(cliGeneratorModel)
     ? cliGeneratorModel
-    : (!string.IsNullOrWhiteSpace(serverMetadata.ModelFile) && serverMetadata.ModelFile != "llama-server"
+    : !string.IsNullOrWhiteSpace(serverMetadata.ModelFile) && serverMetadata.ModelFile != "llama-server"
         ? serverMetadata.ModelFile
-        : "default-model");
+        : "default-model";
 
 // Ensure metadata reflects the active model name if overridden via CLI
 if (!string.IsNullOrWhiteSpace(cliGeneratorModel))
@@ -260,6 +278,10 @@ var (totalRamGb, usedRamGb, _, ramLoadPct) = SystemTelemetry.GetSystemMemoryInfo
 var suiteTitle = string.IsNullOrWhiteSpace(suiteContainer.Name) ? Path.GetFileName(jsonFilePath) : suiteContainer.Name;
 var isDedicatedJudge = !string.Equals(endpoint, effectiveJudgeEndpoint, StringComparison.OrdinalIgnoreCase);
 
+// Format all registered agents dynamically with a 16-character left column alignment
+var formattedAgents = string.Join(Environment.NewLine, capabilities.Agents.Select(a =>
+    $"  {a.Name} Agent".PadRight(16) + $": {a.Status,-7} ({a.Details})"));
+
 Console.WriteLine($"""
 ================================================================================
   LLama-Server HTTP Evaluator (.NET 10 / C# 14)
@@ -273,6 +295,10 @@ Console.WriteLine($"""
   Suite File    : {Path.GetFileName(jsonFilePath)} ({suiteTitle})
   LLM Endpoint  : {endpoint}
   Model         : {serverMetadata.ModelFile} ({serverMetadata.Quantization})
+  Template/Jinja: {capabilities.TemplateFamily} (Tools: {(capabilities.SupportsTools ? "Supported" : "None")})
+  Tool Syntax   : {capabilities.ToolCallSyntax}
+{formattedAgents}
+  Stop Tokens   : {(capabilities.StopTokens.Count > 0 ? string.Join(", ", capabilities.StopTokens) : "Default fallback")}
   Judge Config  : {effectiveJudgeEndpoint} [Model: {effectiveJudgeModel}]{(isDedicatedJudge ? " (External Judge)" : " (Self-Judge)")}
   Capacity Fact : {profile.HardwareCapacityFactor:F2}x baseline multiplier
   Power Profile : TDP Max: {profile.CpuMaxWatts:F0}W | Mult: {profile.InstructionMultiplier:F2}x | PSU: {profile.PsuEfficiency * 100:F0}%
@@ -358,7 +384,7 @@ try
 
         var effectiveSystemPrompt = !string.IsNullOrWhiteSpace(test.SystemPrompt)
             ? test.SystemPrompt
-            : (!string.IsNullOrWhiteSpace(suiteContainer.DefaultSystemPrompt)
+            : !string.IsNullOrWhiteSpace(suiteContainer.DefaultSystemPrompt)
                 ? suiteContainer.DefaultSystemPrompt
                 : """
                   You are a Senior .NET Application Architect and SQL Server DBA expert in C# (.NET 8/9/10), CLR runtime internals (CLR, IL, GC, Memory Management), and T-SQL.
@@ -368,7 +394,7 @@ try
                   3. Structure responses concisely while covering deep architectural mechanics.
 
                   CRITICAL: Keep your internal reasoning under 200 tokens. Do not explore multiple alternatives. Think concisely and output the solution immediately.
-                  """);
+                  """;
 
         var userSuffix = !string.IsNullOrWhiteSpace(test.UserPromptSuffix)
             ? test.UserPromptSuffix
@@ -573,7 +599,7 @@ if (!cts.IsCancellationRequested)
     completedAll = true;
 }
 
-ConsoleReporter.PrintEnhancedSummaryReport(results, runSw.Elapsed);
+ConsoleReporter.PrintEnhancedSummaryReport(results, capabilities, runSw.Elapsed);
 
 if (results.Count > 0)
 {

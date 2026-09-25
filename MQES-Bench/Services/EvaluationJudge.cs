@@ -39,9 +39,9 @@ public static class EvaluationJudge
         // 1. Resolve Effective Judge Prompt inside the service (Test override -> Suite default -> Generic Fallback)
         var effectiveJudgePrompt = !string.IsNullOrWhiteSpace(test.JudgeSystemPrompt)
             ? test.JudgeSystemPrompt
-            : (!string.IsNullOrWhiteSpace(defaultSuiteJudgePrompt)
+            : !string.IsNullOrWhiteSpace(defaultSuiteJudgePrompt)
                 ? defaultSuiteJudgePrompt
-                : DefaultGenericJudgePrompt);
+                : DefaultGenericJudgePrompt;
 
         // 2. Clean candidate response before evaluation
         var cleanResponseToEvaluate = ResponseSanitizer.StripReasoning(rawResponse);

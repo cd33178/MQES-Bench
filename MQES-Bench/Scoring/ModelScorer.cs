@@ -39,11 +39,11 @@ public static class ModelScorer
             <= 150 => 0.85,                     // Too short — light penalty
             > 150 and <= 800 => 1.15,            // Optimal conciseness zone
             > 800 and <= 1500 => 1.00,           // Long but acceptable
-            _ => Math.Max(0.70, 1.0 - ((genTokens - 1500) / 4000.0))  // Progressive verbosity penalty
+            _ => Math.Max(0.70, 1.0 - (genTokens - 1500) / 4000.0)  // Progressive verbosity penalty
         };
 
         // 3. Final composite MQES score
-        var compositeFactor = 0.70 + (0.15 * tokenEfficiency) + (0.15 * speedMultiplier);
+        var compositeFactor = 0.70 + 0.15 * tokenEfficiency + 0.15 * speedMultiplier;
         var finalScore = Math.Clamp(qualityScore * compositeFactor, 0.0, 100.0);
 
         return (Math.Round(finalScore, 1), Math.Round(normalizedTps, 2));
