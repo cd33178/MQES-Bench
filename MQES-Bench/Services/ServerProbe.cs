@@ -419,7 +419,7 @@ public static class ServerProbe
                                 name.Contains("functionary");
 
         // 1. OpenCode: STRICTLY requires verified tool calling
-        bool openCodeReady = isNativeToolModel && syntax.Contains("<tool_call>");
+        var openCodeReady = isNativeToolModel && syntax.Contains("<tool_call>");
         list.Add(new AgentCompatibility(
             Name: "OpenCode",
             Status: openCodeReady ? "READY" : "INCOMPATIBLE",
@@ -428,7 +428,7 @@ public static class ServerProbe
         ));
 
         // 2. Aider: Works with code models via SEARCH/REPLACE diffs without needing tool calls
-        bool aiderReady = family is "ChatML" or "Llama-3" or "DeepSeek" or "Phi-3 / Phi-4" || hasVerifiedTools;
+        var aiderReady = family is "ChatML" or "Llama-3" or "DeepSeek" or "Phi-3 / Phi-4" || hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "Aider",
             Status: aiderReady ? "READY" : "LIMITED",
@@ -437,7 +437,7 @@ public static class ServerProbe
         ));
 
         // 3. Continue: Full prompt/chat support if Jinja exists, raw autocomplete if non-Jinja
-        bool continueReady = !family.Contains("Raw") && !family.Contains("Unknown");
+        var continueReady = !family.Contains("Raw") && !family.Contains("Unknown");
         list.Add(new AgentCompatibility(
             Name: "Continue",
             Status: continueReady ? "READY" : "BASIC",
@@ -446,7 +446,7 @@ public static class ServerProbe
         ));
 
         // 4. Cline: STRICTLY requires tool calling (executing terminal, writing files)
-        bool clineReady = isNativeToolModel;
+        var clineReady = isNativeToolModel;
         list.Add(new AgentCompatibility(
             Name: "Cline",
             Status: clineReady ? "READY" : "INCOMPATIBLE",
@@ -455,7 +455,7 @@ public static class ServerProbe
         ));
 
         // 5. Copilot CLI: Works with instruct models for single-command generation
-        bool copilotCliReady = family is "ChatML" or "Llama-3" or "DeepSeek";
+        var copilotCliReady = family is "ChatML" or "Llama-3" or "DeepSeek";
         list.Add(new AgentCompatibility(
             Name: "Copilot CLI",
             Status: copilotCliReady ? "READY" : "LIMITED",
@@ -491,7 +491,7 @@ public static class ServerProbe
     /// </summary>
     /// <param name="modelIdentifier">The model file name, ID, or repo tag.</param>
     /// <returns>A read-only collection containing up to four distinct stop sequences.</returns>
-    public static IReadOnlyList<string> GetStopSequences(string? modelIdentifier)
+    private static IReadOnlyList<string> GetStopSequences(string? modelIdentifier)
     {
         if (string.IsNullOrWhiteSpace(modelIdentifier))
         {
