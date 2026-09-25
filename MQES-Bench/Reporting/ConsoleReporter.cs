@@ -506,7 +506,10 @@ public static class ConsoleReporter
         Console.WriteLine(toolStatus);
         Console.ResetColor();
         Console.WriteLine($"│ Inferred Syntax    : {caps.ToolCallSyntax}");
-        Console.WriteLine($"│ Active Stop Tokens : {(caps.StopTokens.Count > 0 ? string.Join(", ", caps.StopTokens) : "None registered")}");
+        var formattedStops = caps.StopTokens.Count > 0
+            ? string.Join(", ", caps.StopTokens.Select(s => s.Replace("\r", "\\r").Replace("\n", "\\n")))
+            : "None registered";
+        Console.WriteLine($"│ Active Stop Tokens : {formattedStops}");
         Console.WriteLine("├───────────────────────────────────────────────────────────────────────────────");
 
         foreach (var agent in caps.Agents)

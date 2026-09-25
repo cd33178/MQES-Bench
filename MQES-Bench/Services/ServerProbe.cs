@@ -39,7 +39,7 @@ public static class ServerProbe
                 http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             }
 
-            // 1. GET /v1/models — Extracts file, quant, and deep GGUF architectural meta
+            // 1. GET /v1/models — Model identifier, quantization, and architectural meta
             try
             {
                 var modelsJson = await http.GetFromJsonAsync<JsonElement>($"{baseUri}/v1/models");
@@ -63,7 +63,6 @@ public static class ServerProbe
                         metadata.Quantization = fullPath.Split(':').LastOrDefault()?.ToUpperInvariant() ?? "Standard";
                     }
 
-                    // Extract deep architecture specs if exposed under 'meta'
                     if (firstModel.TryGetProperty("meta", out var meta))
                     {
                         if (meta.TryGetProperty("n_ctx_train", out var nCtxTrain))
@@ -103,12 +102,58 @@ public static class ServerProbe
                 // Degrade silently
             }
 
-            // 2. GET /props — Specific to llama-server; extracts runtime slots, n_ctx, and server-side samplers
+            // 2. GET /slots — Primary endpoint for active runtime samplers in modern llama-server
+            var samplersResolved = false;
+            try
+            {
+                var slotsJson = await http.GetFromJsonAsync<JsonElement>($"{baseUri}/slots");
+                if (slotsJson.ValueKind == JsonValueKind.Array && slotsJson.GetArrayLength() > 0)
+                {
+                    metadata.TotalSlots = slotsJson.GetArrayLength();
+                    var firstSlot = slotsJson[0];
+
+                    if (firstSlot.TryGetProperty("params", out var slotParams))
+                    {
+                        if (slotParams.TryGetProperty("temp", out var t) || slotParams.TryGetProperty("temperature", out t))
+                        {
+                            metadata.ServerTemperature = t.GetDouble();
+                        }
+
+                        if (slotParams.TryGetProperty("min_p", out var minP))
+                        {
+                            metadata.ServerMinP = minP.GetDouble();
+                        }
+
+                        if (slotParams.TryGetProperty("repeat_penalty", out var repP))
+                        {
+                            metadata.ServerRepeatPenalty = repP.GetDouble();
+                        }
+
+                        if (slotParams.TryGetProperty("repeat_last_n", out var repN))
+                        {
+                            metadata.ServerRepeatLastN = repN.GetInt32();
+                        }
+
+                        if (slotParams.TryGetProperty("n_predict", out var nPred))
+                        {
+                            metadata.MaxPredictTokens = nPred.GetInt32();
+                        }
+
+                        samplersResolved = true;
+                    }
+                }
+            }
+            catch
+            {
+                // Degrade silently to /props fallback
+            }
+
+            // 3. Fallback: GET /props (Legacy or alternative llama-server builds)
             try
             {
                 var propsJson = await http.GetFromJsonAsync<JsonElement>($"{baseUri}/props");
 
-                if (propsJson.TryGetProperty("total_slots", out var slots))
+                if (propsJson.TryGetProperty("total_slots", out var slots) && metadata.TotalSlots <= 1)
                 {
                     metadata.TotalSlots = slots.GetInt32();
                 }
@@ -120,29 +165,32 @@ public static class ServerProbe
                         metadata.ContextSize = nCtx.GetInt32();
                     }
 
-                    if (genSettings.TryGetProperty("n_predict", out var nPred))
+                    if (!samplersResolved)
                     {
-                        metadata.MaxPredictTokens = nPred.GetInt32();
-                    }
+                        if (genSettings.TryGetProperty("n_predict", out var nPred))
+                        {
+                            metadata.MaxPredictTokens = nPred.GetInt32();
+                        }
 
-                    if (genSettings.TryGetProperty("temperature", out var temp))
-                    {
-                        metadata.ServerTemperature = temp.GetDouble();
-                    }
+                        if (genSettings.TryGetProperty("temperature", out var temp))
+                        {
+                            metadata.ServerTemperature = temp.GetDouble();
+                        }
 
-                    if (genSettings.TryGetProperty("min_p", out var minP))
-                    {
-                        metadata.ServerMinP = minP.GetDouble();
-                    }
+                        if (genSettings.TryGetProperty("min_p", out var minP))
+                        {
+                            metadata.ServerMinP = minP.GetDouble();
+                        }
 
-                    if (genSettings.TryGetProperty("repeat_penalty", out var repPen))
-                    {
-                        metadata.ServerRepeatPenalty = repPen.GetDouble();
-                    }
+                        if (genSettings.TryGetProperty("repeat_penalty", out var repPen))
+                        {
+                            metadata.ServerRepeatPenalty = repPen.GetDouble();
+                        }
 
-                    if (genSettings.TryGetProperty("repeat_last_n", out var repLast))
-                    {
-                        metadata.ServerRepeatLastN = repLast.GetInt32();
+                        if (genSettings.TryGetProperty("repeat_last_n", out var repLast))
+                        {
+                            metadata.ServerRepeatLastN = repLast.GetInt32();
+                        }
                     }
                 }
             }
@@ -155,7 +203,7 @@ public static class ServerProbe
         }
         catch
         {
-            // Fallback preserves safe defaults
+            // Safe fallback
         }
 
         return metadata;
@@ -285,15 +333,25 @@ public static class ServerProbe
 
             var toolSyntax = "None";
             if (template.Contains("<tool_call>"))
+            {
                 toolSyntax = "<tool_call>...</tool_call> (OpenAI/Hermes standard)";
+            }
             else if (template.Contains("<tool>"))
+            {
                 toolSyntax = "<tool>...</tool> (Custom variant)";
+            }
             else if (template.Contains("<|python_tag|>"))
+            {
                 toolSyntax = "<|python_tag|> (Llama 3 native)";
+            }
             else if (template.Contains("[TOOL_CALLS]"))
+            {
                 toolSyntax = "[TOOL_CALLS] (Mistral native)";
+            }
             else if (hasToolSupport)
+            {
                 toolSyntax = "Custom JSON Schema in body";
+            }
 
             return new ModelAgentCapabilities
             {
@@ -301,7 +359,7 @@ public static class ServerProbe
                 SupportsTools = hasToolSupport,
                 ToolCallSyntax = toolSyntax,
                 StopTokens = resolvedStops,
-                Agents = EvaluateAgents(family, hasToolSupport, toolSyntax)
+                Agents = EvaluateAgents(family, hasToolSupport, toolSyntax, modelIdentifier)
             };
         }
 
@@ -319,77 +377,89 @@ public static class ServerProbe
             _ => "Generic / Unknown"
         };
 
-        // Modern coder families (Qwen, Pulsar, KAT-Coder, DeepSeek, Llama-3) have built-in tool calling
-        var inferredTools = inferredFamily is "ChatML" or "Llama-3" or "DeepSeek";
-        var inferredSyntax = inferredFamily switch
+        // CRITICAL FIX: ChatML/Llama-3 by itself does NOT mean the model has tool calling.
+        // Only official models explicitly trained on tool-calling datasets have reliable function calling.
+        var isKnownToolTrainedModel = (name.Contains("qwen2.5-coder") && name.Contains("instruct")) ||
+                                      name.Contains("hermes-3") ||
+                                      name.Contains("command-r") ||
+                                      name.Contains("functionary");
+
+        var inferredSyntax = isKnownToolTrainedModel switch
         {
-            "ChatML" => "<tool_call>...</tool_call> (OpenAI/Hermes/Qwen standard)",
-            "Llama-3" => "<|python_tag|> (Llama 3 native)",
-            "DeepSeek" => "Custom JSON Schema in body",
-            _ => "None"
+            true when inferredFamily == "ChatML" => "<tool_call>...</tool_call> (OpenAI/Hermes/Qwen standard)",
+            true when inferredFamily == "Llama-3" => "<|python_tag|> (Llama 3 native)",
+            true => "Custom JSON Schema in body",
+            false => "None"
         };
 
         return new ModelAgentCapabilities
         {
             TemplateFamily = $"{inferredFamily} (Inferred from Model ID)",
-            SupportsTools = inferredTools,
+            SupportsTools = isKnownToolTrainedModel,
             ToolCallSyntax = inferredSyntax,
             StopTokens = resolvedStops,
-            Agents = EvaluateAgents(inferredFamily, inferredTools, inferredSyntax)
+            Agents = EvaluateAgents(inferredFamily, isKnownToolTrainedModel, inferredSyntax, modelIdentifier)
         };
     }
 
     /// <summary>
-    /// Extensible evaluation matrix for coding agents and development assistants.
-    /// Add future agents here without altering presentation or logging layers.
+    /// Evaluates agent compatibility realistically without false positives.
+    /// Distinguishes between native tool-calling models and instruction-only code models.
     /// </summary>
-    private static List<AgentCompatibility> EvaluateAgents(string family, bool hasTools, string syntax)
+    private static List<AgentCompatibility> EvaluateAgents(string family, bool hasVerifiedTools, string syntax, string? modelIdentifier)
     {
         var list = new List<AgentCompatibility>();
+        var name = (modelIdentifier ?? string.Empty).ToLowerInvariant();
 
-        // 1. OpenCode (CLI agent specialized in tool_calls and multi-file code editing)
-        var openCodeReady = hasTools && (syntax.Contains("<tool_call>") || family == "ChatML");
+        // Must strictly have verified tools from Jinja OR belong to an explicit tool-trained model family
+        var isNativeToolModel = hasVerifiedTools ||
+                                (name.Contains("qwen2.5-coder") && name.Contains("instruct")) ||
+                                name.Contains("hermes-3") ||
+                                name.Contains("command-r") ||
+                                name.Contains("functionary");
+
+        // 1. OpenCode: STRICTLY requires verified tool calling
+        bool openCodeReady = isNativeToolModel && syntax.Contains("<tool_call>");
         list.Add(new AgentCompatibility(
             Name: "OpenCode",
-            Status: openCodeReady ? "READY" : "RISK",
-            Details: openCodeReady ? "Standard <tool_call> schema" : "May fail tool parser regex",
+            Status: openCodeReady ? "READY" : "INCOMPATIBLE",
+            Details: openCodeReady ? "Standard <tool_call> schema supported" : "No tool calling support (fails file creation)",
             IsReady: openCodeReady
         ));
 
-        // 2. Aider (Repository editing agent operating via git diffs and whole-file rewrites)
-        var aiderReady = family is "ChatML" or "Llama-3" or "DeepSeek" or "Phi-3 / Phi-4" || hasTools;
+        // 2. Aider: Works with code models via SEARCH/REPLACE diffs without needing tool calls
+        bool aiderReady = family is "ChatML" or "Llama-3" or "DeepSeek" or "Phi-3 / Phi-4" || hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "Aider",
             Status: aiderReady ? "READY" : "LIMITED",
-            Details: aiderReady ? "Native diff/whole & template" : "Fallback to --edit-format whole",
+            Details: aiderReady ? "Native SEARCH/REPLACE diff mode" : "Fallback to --edit-format whole",
             IsReady: aiderReady
         ));
 
-        // 3. Continue (VS Code / Visual Studio extension for codebase context, FIM, and slash commands)
-        var continueReady = family != "Raw / Non-Jinja";
+        // 3. Continue: Full prompt/chat support if Jinja exists, raw autocomplete if non-Jinja
+        bool continueReady = !family.Contains("Raw") && !family.Contains("Unknown");
         list.Add(new AgentCompatibility(
             Name: "Continue",
             Status: continueReady ? "READY" : "BASIC",
-            Details: continueReady ? "Full context & slash commands" : "Raw autocomplete only",
+            Details: continueReady ? "Chat and context (@workspace) ready" : "Raw autocomplete only",
             IsReady: continueReady
         ));
 
-        // 4. Cline / Roo Code (Autonomous coding agent executing commands, file diffs, and test suites)
-        var clineReady = hasTools;
-        var clineLimited = !hasTools && family is "ChatML" or "Llama-3";
+        // 4. Cline: STRICTLY requires tool calling (executing terminal, writing files)
+        bool clineReady = isNativeToolModel;
         list.Add(new AgentCompatibility(
             Name: "Cline",
-            Status: clineReady ? "READY" : clineLimited ? "LIMITED" : "INCOMPATIBLE",
-            Details: clineReady ? "Native function calling" : clineLimited ? "Requires XML tool fallback" : "No tool support",
+            Status: clineReady ? "READY" : "INCOMPATIBLE",
+            Details: clineReady ? "Native tool calling supported" : "Cannot invoke file/system tools",
             IsReady: clineReady
         ));
 
-        // 5. Copilot CLI (Terminal assistant focused on concise shell and PowerShell command generation)
-        var copilotCliReady = family is "ChatML" or "Llama-3" or "DeepSeek";
+        // 5. Copilot CLI: Works with instruct models for single-command generation
+        bool copilotCliReady = family is "ChatML" or "Llama-3" or "DeepSeek";
         list.Add(new AgentCompatibility(
             Name: "Copilot CLI",
             Status: copilotCliReady ? "READY" : "LIMITED",
-            Details: copilotCliReady ? "Precise command generation" : "May emit conversational noise",
+            Details: copilotCliReady ? "Precise command generation" : "May emit conversational text",
             IsReady: copilotCliReady
         ));
 
