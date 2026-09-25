@@ -183,7 +183,10 @@ var serverMetadata = await ServerProbe.GetServerMetadataAsync(endpoint, generato
 var capabilities = await ServerProbe.InspectModelCapabilitiesAsync(endpoint, generatorApiKey, serverMetadata.ModelFile);
 if (inspectOnly)
 {
-    ConsoleReporter.PrintModelInspectionReport(endpoint, serverMetadata, capabilities);
+    // Live empirical smoke test
+    var probe = await ServerProbe.RunActiveProbeAsync(endpoint, generatorApiKey);
+
+    ConsoleReporter.PrintModelInspectionReport(endpoint, serverMetadata, capabilities, probe);
     return;
 }
 

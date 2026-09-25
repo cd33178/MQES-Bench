@@ -1,26 +1,25 @@
 ﻿using MQESBench.Models;
 using OpenAI.Chat;
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace MQESBench.Services;
 
 /// <summary>
-/// Detects the active model, server metadata, and agent/tool capabilities by querying standard REST endpoints.
-/// Compatible with llama-server, Ollama, vLLM, LM Studio, and any OpenAI-compatible server.
-/// Inspects active model metadata, Jinja chat templates, and agent compatibility
-/// by querying standard REST endpoints (llama-server, Ollama, vLLM, LM Studio).
+/// Probes server metadata, low-level GGUF architecture, Jinja chat templates,
+/// and live tool-calling capabilities across OpenAI-compatible HTTP inference servers.
 /// </summary>
 public static class ServerProbe
 {
     /// <summary>
-    /// Queries <c>/v1/models</c> and <c>/props</c> to extract model name, quantization scheme,
-    /// and active context window length. All exceptions are handled gracefully to prevent
-    /// blocking benchmark initialization when the server is unreachable.
+    /// Queries <c>/v1/models</c>, <c>/slots</c>, and <c>/props</c> to extract model identifiers,
+    /// quantization schemes, GGUF structural parameters, and active server samplers.
     /// </summary>
-    /// <param name="endpoint">The base URL of the OpenAI-compatible server (e.g., http://127.0.0.1:8080).</param>
+    /// <param name="endpoint">The base URL of the inference server (e.g., http://127.0.0.1:8080).</param>
     /// <param name="apiKey">Optional bearer authentication token.</param>
     /// <returns>A populated <see cref="ServerMetadata"/> instance, or safe defaults if unreachable.</returns>
     public static async Task<ServerMetadata> GetServerMetadataAsync(string endpoint, string? apiKey = null)
@@ -39,7 +38,7 @@ public static class ServerProbe
                 http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             }
 
-            // 1. GET /v1/models — Model identifier, quantization, and architectural meta
+            // 1. GET /v1/models — Discovers model file, quantization tags, and GGUF architectural metadata
             try
             {
                 var modelsJson = await http.GetFromJsonAsync<JsonElement>($"{baseUri}/v1/models");
@@ -99,10 +98,10 @@ public static class ServerProbe
             }
             catch
             {
-                // Degrade silently
+                // Degrade silently if /v1/models is unavailable
             }
 
-            // 2. GET /slots — Primary endpoint for active runtime samplers in modern llama-server
+            // 2. GET /slots — Reads active runtime sampler arguments in modern llama-server builds
             var samplersResolved = false;
             try
             {
@@ -148,7 +147,7 @@ public static class ServerProbe
                 // Degrade silently to /props fallback
             }
 
-            // 3. Fallback: GET /props (Legacy or alternative llama-server builds)
+            // 3. GET /props — Legacy endpoint fallback for context limits and parameters
             try
             {
                 var propsJson = await http.GetFromJsonAsync<JsonElement>($"{baseUri}/props");
@@ -203,15 +202,15 @@ public static class ServerProbe
         }
         catch
         {
-            // Safe fallback
+            // Safe fallback preserves default metadata
         }
 
         return metadata;
     }
 
     /// <summary>
-    /// Inspects the server's Jinja chat template and runtime generation properties
-    /// to determine tool syntax, stop tokens, and multi-agent compatibility.
+    /// Inspects the server's Jinja chat template and runtime properties to determine tool syntax,
+    /// stop tokens, and agent readiness. Falls back to model signature inference when templates are hidden.
     /// </summary>
     /// <param name="endpoint">The base URL of the OpenAI-compatible server (e.g., http://127.0.0.1:8080).</param>
     /// <param name="apiKey">Optional bearer authentication token.</param>
@@ -239,7 +238,7 @@ public static class ServerProbe
             var chatTemplate = string.Empty;
             var stopTokens = new List<string>();
 
-            // 1. Query /props (checks if runtime exposes chat_template or stop tokens)
+            // 1. Query /props for runtime chat_template and active stop sequences
             try
             {
                 var propsJson = await http.GetFromJsonAsync<JsonElement>($"{baseUri}/props", ct);
@@ -264,7 +263,7 @@ public static class ServerProbe
                 // Degrade silently
             }
 
-            // 2. Query /v1/models if chat_template was absent in /props
+            // 2. Query /v1/models if chat_template was omitted in /props
             if (string.IsNullOrWhiteSpace(chatTemplate))
             {
                 try
@@ -300,11 +299,179 @@ public static class ServerProbe
     }
 
     /// <summary>
-    /// Analyzes raw Jinja templates or infers architecture and agent readiness from the model identifier.
+    /// Executes a lightweight empirical probe request to verify live function calling,
+    /// prompt-to-token throughput, and round-trip execution latency.
+    /// </summary>
+    public static async Task<ModelProbeResult> RunActiveProbeAsync(
+        string endpoint,
+        string? apiKey = null,
+        CancellationToken ct = default)
+    {
+        var uri = new Uri(endpoint);
+        var completionsUrl = $"{uri.Scheme}://{uri.Authority}/v1/chat/completions";
+
+        using var http = new HttpClient();
+        http.Timeout = TimeSpan.FromSeconds(25);
+
+        if (!string.IsNullOrWhiteSpace(apiKey) && !string.Equals(apiKey, "not-needed", StringComparison.OrdinalIgnoreCase))
+        {
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        }
+
+        // Lightweight payload declaring a dummy filesystem tool
+        var payload = new
+        {
+            messages = new[]
+            {
+                new { role = "user", content = "Use the write_file tool to save 'ok' into 'probe.txt'." }
+            },
+            tools = new[]
+            {
+                new
+                {
+                    type = "function",
+                    function = new
+                    {
+                        name = "write_file",
+                        description = "Writes content to a file path.",
+                        parameters = new
+                        {
+                            type = "object",
+                            properties = new
+                            {
+                                path = new { type = "string" },
+                                content = new { type = "string" }
+                            },
+                            required = new[] { "path", "content" }
+                        }
+                    }
+                }
+            },
+            tool_choice = "auto",
+            max_tokens = 64,
+            temperature = 0.0
+        };
+
+        var sw = Stopwatch.StartNew();
+
+        try
+        {
+            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            var response = await http.PostAsync(completionsUrl, content, ct);
+            sw.Stop();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new ModelProbeResult
+                {
+                    ExecutedSuccessfully = false,
+                    ErrorMessage = $"HTTP {(int)response.StatusCode}: {response.ReasonPhrase}"
+                };
+            }
+
+            var jsonStr = await response.Content.ReadAsStringAsync(ct);
+            using var doc = JsonDocument.Parse(jsonStr);
+            var root = doc.RootElement;
+
+            // Extract token usage metrics
+            var promptTokens = 0;
+            var completionTokens = 0;
+            if (root.TryGetProperty("usage", out var usage))
+            {
+                if (usage.TryGetProperty("prompt_tokens", out var pt))
+                {
+                    promptTokens = pt.GetInt32();
+                }
+
+                if (usage.TryGetProperty("completion_tokens", out var ctProp))
+                {
+                    completionTokens = ctProp.GetInt32();
+                }
+            }
+
+            var elapsedSec = Math.Max(0.001, sw.Elapsed.TotalSeconds);
+            var tps = completionTokens > 0 ? completionTokens / elapsedSec : 0.0;
+
+            // Inspect response choices
+            var hasNativeTools = false;
+            var detectedSyntax = "None";
+            var rawContent = string.Empty;
+            var finishReason = "unknown";
+
+            if (root.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0)
+            {
+                var choice = choices[0];
+                if (choice.TryGetProperty("finish_reason", out var fr))
+                {
+                    finishReason = fr.GetString() ?? "unknown";
+                }
+
+                if (choice.TryGetProperty("message", out var msg))
+                {
+                    // Check 1: Standard OpenAI structured tool_calls array
+                    if (msg.TryGetProperty("tool_calls", out var toolCalls) && toolCalls.GetArrayLength() > 0)
+                    {
+                        hasNativeTools = true;
+                        detectedSyntax = "Native OpenAI JSON (tool_calls array)";
+                    }
+
+                    if (msg.TryGetProperty("content", out var textContent))
+                    {
+                        rawContent = textContent.GetString() ?? string.Empty;
+                    }
+                }
+            }
+
+            // Check 2: Embedded text-based tool syntax if the array is empty
+            if (!hasNativeTools && !string.IsNullOrWhiteSpace(rawContent))
+            {
+                if (rawContent.Contains("<tool_call>"))
+                {
+                    hasNativeTools = true;
+                    detectedSyntax = "<tool_call>...</tool_call> (ChatML text format)";
+                }
+                else if (rawContent.Contains("call:write_file") || rawContent.Contains("call:"))
+                {
+                    hasNativeTools = true;
+                    detectedSyntax = "call:<function>{...} (Gemma native format)";
+                }
+                else if (rawContent.Contains("[TOOL_CALLS]"))
+                {
+                    hasNativeTools = true;
+                    detectedSyntax = "[TOOL_CALLS] (Mistral text format)";
+                }
+            }
+
+            return new ModelProbeResult
+            {
+                ExecutedSuccessfully = true,
+                HasNativeToolCalls = hasNativeTools,
+                DetectedToolSyntax = detectedSyntax,
+                RawResponseContent = rawContent.Trim().Replace("\r", " ").Replace("\n", " "),
+                TokensPerSecond = tps,
+                LatencyMs = sw.Elapsed.TotalMilliseconds,
+                PromptTokens = promptTokens,
+                CompletionTokens = completionTokens,
+                FinishReason = finishReason
+            };
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            return new ModelProbeResult
+            {
+                ExecutedSuccessfully = false,
+                ErrorMessage = ex.Message,
+                LatencyMs = sw.Elapsed.TotalMilliseconds
+            };
+        }
+    }
+
+    /// <summary>
+    /// Analyzes raw Jinja templates or infers architecture, tool semantics, and agent readiness from the model identifier.
     /// </summary>
     private static ModelAgentCapabilities AnalyzeTemplate(string template, List<string> stops, string? modelIdentifier)
     {
-        // If HTTP endpoints returned active stop tokens, use them; otherwise, resolve known model stop tokens
         var resolvedStops = stops.Count > 0
             ? stops
             : [.. GetStopSequences(modelIdentifier)];
@@ -329,7 +496,8 @@ public static class ServerProbe
                                   template.Contains("<tool>") ||
                                   template.Contains("[TOOL_CALLS]") ||
                                   template.Contains("<|python_tag|>") ||
-                                  template.Contains("action"));
+                                  template.Contains("action") ||
+                                  template.Contains("call:"));
 
             var toolSyntax = "None";
             if (template.Contains("<tool_call>"))
@@ -347,6 +515,10 @@ public static class ServerProbe
             else if (template.Contains("[TOOL_CALLS]"))
             {
                 toolSyntax = "[TOOL_CALLS] (Mistral native)";
+            }
+            else if (family == "Gemma" && hasToolSupport)
+            {
+                toolSyntax = "call:<function>{...} (Gemma native)";
             }
             else if (hasToolSupport)
             {
@@ -377,58 +549,126 @@ public static class ServerProbe
             _ => "Generic / Unknown"
         };
 
-        // CRITICAL FIX: ChatML/Llama-3 by itself does NOT mean the model has tool calling.
-        // Only official models explicitly trained on tool-calling datasets have reliable function calling.
-        var isKnownToolTrainedModel = (name.Contains("qwen2.5-coder") && name.Contains("instruct")) ||
-                                      name.Contains("hermes-3") ||
-                                      name.Contains("command-r") ||
-                                      name.Contains("functionary");
+        // Identifies whether the model is an official Instruction/Chat-tuned build
+        var isInstructTuned = name.Contains("-it") ||
+                              name.Contains("instruct") ||
+                              name.Contains("chat") ||
+                              name.Contains("hermes") ||
+                              name.Contains("command-r");
 
-        var inferredSyntax = isKnownToolTrainedModel switch
+        // Major frontier instruct models natively support function calling
+        var isNativeToolTrained = isInstructTuned && inferredFamily is "Gemma" or "ChatML" or "Llama-3" or "DeepSeek" or "Mistral / Llama-2";
+
+        var inferredSyntax = (isNativeToolTrained, inferredFamily) switch
         {
-            true when inferredFamily == "ChatML" => "<tool_call>...</tool_call> (OpenAI/Hermes/Qwen standard)",
-            true when inferredFamily == "Llama-3" => "<|python_tag|> (Llama 3 native)",
-            true => "Custom JSON Schema in body",
-            false => "None"
+            (true, "Gemma") => "call:<function>{...} (Gemma native)",
+            (true, "ChatML") => "<tool_call>...</tool_call> (OpenAI/Hermes/Qwen standard)",
+            (true, "Llama-3") => "<|python_tag|> (Llama 3 native)",
+            (true, "Mistral / Llama-2") => "[TOOL_CALLS] (Mistral native)",
+            (true, "DeepSeek") => "Custom JSON Schema in body",
+            _ => "None"
         };
 
         return new ModelAgentCapabilities
         {
             TemplateFamily = $"{inferredFamily} (Inferred from Model ID)",
-            SupportsTools = isKnownToolTrainedModel,
+            SupportsTools = isNativeToolTrained,
             ToolCallSyntax = inferredSyntax,
             StopTokens = resolvedStops,
-            Agents = EvaluateAgents(inferredFamily, isKnownToolTrainedModel, inferredSyntax, modelIdentifier)
+            Agents = EvaluateAgents(inferredFamily, isNativeToolTrained, inferredSyntax, modelIdentifier)
         };
     }
 
     /// <summary>
-    /// Evaluates agent compatibility realistically without false positives.
-    /// Distinguishes between native tool-calling models and instruction-only code models.
+    /// Evaluates compatibility across 12 distinct coding agents, autonomous frameworks, and IDE assistants.
     /// </summary>
     private static List<AgentCompatibility> EvaluateAgents(string family, bool hasVerifiedTools, string syntax, string? modelIdentifier)
     {
         var list = new List<AgentCompatibility>();
         var name = (modelIdentifier ?? string.Empty).ToLowerInvariant();
 
-        // Must strictly have verified tools from Jinja OR belong to an explicit tool-trained model family
-        var isNativeToolModel = hasVerifiedTools ||
-                                (name.Contains("qwen2.5-coder") && name.Contains("instruct")) ||
-                                name.Contains("hermes-3") ||
-                                name.Contains("command-r") ||
-                                name.Contains("functionary");
+        var isInstruct = name.Contains("-it") || name.Contains("instruct") || name.Contains("chat");
 
-        // 1. OpenCode: STRICTLY requires verified tool calling
-        var openCodeReady = isNativeToolModel && syntax.Contains("<tool_call>");
+        // --- Category 1: Strict Function Calling / MCP / ACI Dependent Agents ---
+
+        // 1. OpenCode: Strict requirement for JSON schema tool calling
+        var openCodeReady = hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "OpenCode",
             Status: openCodeReady ? "READY" : "INCOMPATIBLE",
-            Details: openCodeReady ? "Standard <tool_call> schema supported" : "No tool calling support (fails file creation)",
+            Details: openCodeReady ? "Tool calling schemas supported" : "No tool calling support (fails file creation)",
             IsReady: openCodeReady
         ));
 
-        // 2. Aider: Works with code models via SEARCH/REPLACE diffs without needing tool calls
-        var aiderReady = family is "ChatML" or "Llama-3" or "DeepSeek" or "Phi-3 / Phi-4" || hasVerifiedTools;
+        // 2. Goose (Block): Model Context Protocol & tool invocation framework
+        var gooseReady = hasVerifiedTools;
+        list.Add(new AgentCompatibility(
+            Name: "Goose",
+            Status: gooseReady ? "READY" : "INCOMPATIBLE",
+            Details: gooseReady ? "Native MCP & tool execution ready" : "Cannot invoke MCP developer toolkits",
+            IsReady: gooseReady
+        ));
+
+        // 3. OpenHands (OpenDevin): Autonomous runtime agent executing shell and file edits
+        var openHandsReady = hasVerifiedTools;
+        list.Add(new AgentCompatibility(
+            Name: "OpenHands",
+            Status: openHandsReady ? "READY" : "INCOMPATIBLE",
+            Details: openHandsReady ? "Structured action stream supported" : "Action serialization fails without tools",
+            IsReady: openHandsReady
+        ));
+
+        // 4. SWE-agent (Princeton): Autonomous agent executing bash/editor via Agent-Computer Interface
+        var sweAgentReady = hasVerifiedTools;
+        list.Add(new AgentCompatibility(
+            Name: "SWE-agent",
+            Status: sweAgentReady ? "READY" : "INCOMPATIBLE",
+            Details: sweAgentReady ? "ACI command generation verified" : "Cannot execute ACI tool commands",
+            IsReady: sweAgentReady
+        ));
+
+        // 5. Plandex: Multi-file development engine with sandboxed branch planning
+        var plandexReady = hasVerifiedTools;
+        list.Add(new AgentCompatibility(
+            Name: "Plandex",
+            Status: plandexReady ? "READY" : "INCOMPATIBLE",
+            Details: plandexReady ? "Multi-file planning & tool execution ready" : "Fails branch plan serialization",
+            IsReady: plandexReady
+        ));
+
+        // 6. Cline: Autonomous VS Code agent requiring shell and filesystem tools
+        var clineReady = hasVerifiedTools;
+        list.Add(new AgentCompatibility(
+            Name: "Cline",
+            Status: clineReady ? "READY" : "INCOMPATIBLE",
+            Details: clineReady ? "Native tool calling supported" : "Cannot invoke file/system tools",
+            IsReady: clineReady
+        ));
+
+        // --- Category 2: Hybrid Agents (Tool mode for autonomous actions, fallback for diffs) ---
+
+        // 7. Cursor / Windsurf: Full agentic IDE mode vs standard inline diffs
+        var cursorAgentReady = hasVerifiedTools;
+        list.Add(new AgentCompatibility(
+            Name: "Cursor/Windsurf",
+            Status: cursorAgentReady ? "READY" : "LIMITED",
+            Details: cursorAgentReady ? "Autonomous agent mode supported" : "Degrades to standard inline diff mode",
+            IsReady: cursorAgentReady
+        ));
+
+        // 8. Avante.nvim: Neovim autonomous codebase assistant
+        var avanteReady = hasVerifiedTools;
+        list.Add(new AgentCompatibility(
+            Name: "Avante.nvim",
+            Status: avanteReady ? "READY" : "LIMITED",
+            Details: avanteReady ? "Full codebase planning & tool support" : "Limited to direct buffer completion",
+            IsReady: avanteReady
+        ));
+
+        // --- Category 3: Diff, Text, and Chat-Based Agents (Operate without Tool Calling) ---
+
+        // 9. Aider: Native SEARCH/REPLACE git diff edits
+        var aiderReady = family is "ChatML" or "Llama-3" or "DeepSeek" or "Phi-3 / Phi-4" or "Gemma" or "Mistral / Llama-2" || hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "Aider",
             Status: aiderReady ? "READY" : "LIMITED",
@@ -436,7 +676,16 @@ public static class ServerProbe
             IsReady: aiderReady
         ));
 
-        // 3. Continue: Full prompt/chat support if Jinja exists, raw autocomplete if non-Jinja
+        // 10. Mentat: Interactive terminal assistant operating via git diffs and AST context
+        var mentatReady = family is "ChatML" or "Llama-3" or "DeepSeek" or "Phi-3 / Phi-4" or "Gemma" || hasVerifiedTools;
+        list.Add(new AgentCompatibility(
+            Name: "Mentat",
+            Status: mentatReady ? "READY" : "LIMITED",
+            Details: mentatReady ? "Git diff & context parsing supported" : "May fail AST diff application",
+            IsReady: mentatReady
+        ));
+
+        // 11. Continue: Context-aware IDE chat and slash commands (@workspace)
         var continueReady = !family.Contains("Raw") && !family.Contains("Unknown");
         list.Add(new AgentCompatibility(
             Name: "Continue",
@@ -445,17 +694,8 @@ public static class ServerProbe
             IsReady: continueReady
         ));
 
-        // 4. Cline: STRICTLY requires tool calling (executing terminal, writing files)
-        var clineReady = isNativeToolModel;
-        list.Add(new AgentCompatibility(
-            Name: "Cline",
-            Status: clineReady ? "READY" : "INCOMPATIBLE",
-            Details: clineReady ? "Native tool calling supported" : "Cannot invoke file/system tools",
-            IsReady: clineReady
-        ));
-
-        // 5. Copilot CLI: Works with instruct models for single-command generation
-        var copilotCliReady = family is "ChatML" or "Llama-3" or "DeepSeek";
+        // 12. Copilot CLI: Terminal shell and PowerShell command generation
+        var copilotCliReady = isInstruct || family is "ChatML" or "Llama-3" or "DeepSeek" or "Gemma";
         list.Add(new AgentCompatibility(
             Name: "Copilot CLI",
             Status: copilotCliReady ? "READY" : "LIMITED",
@@ -467,11 +707,8 @@ public static class ServerProbe
     }
 
     /// <summary>
-    /// Dynamically injects up to 4 model-appropriate stop sequences into an instance
-    /// of <see cref="ChatCompletionOptions"/> based on the discovered model file name or ID.
+    /// Dynamically injects model-appropriate stop sequences into an instance of <see cref="ChatCompletionOptions"/>.
     /// </summary>
-    /// <param name="options">The target chat completion options instance.</param>
-    /// <param name="modelIdentifier">The model identifier, tag, or GGUF file path.</param>
     public static void ConfigureStopSequences(ChatCompletionOptions options, string? modelIdentifier)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -486,12 +723,9 @@ public static class ServerProbe
     }
 
     /// <summary>
-    /// Resolves up to 4 exact stop tokens tailored to the target model family
-    /// to adhere strictly to the OpenAI API limit of 4 stop sequences per request.
+    /// Resolves exact turn-boundary stop tokens tailored to the target model family.
     /// </summary>
-    /// <param name="modelIdentifier">The model file name, ID, or repo tag.</param>
-    /// <returns>A read-only collection containing up to four distinct stop sequences.</returns>
-    private static IReadOnlyList<string> GetStopSequences(string? modelIdentifier)
+    public static IReadOnlyList<string> GetStopSequences(string? modelIdentifier)
     {
         if (string.IsNullOrWhiteSpace(modelIdentifier))
         {
@@ -502,7 +736,16 @@ public static class ServerProbe
 
         return name switch
         {
-            // DeepSeek family (requires wide fullwidth Unicode bars U+FF5C for native control tokens)
+            // Google Gemma architecture
+            _ when name.Contains("gemma") =>
+            [
+                "<end_of_turn>",
+                "<eos>",
+                "<start_of_turn>",
+                "\n<start_of_turn>"
+            ],
+
+            // DeepSeek architecture
             _ when name.Contains("deepseek") =>
             [
                 "<｜end of sentence｜>",
@@ -512,7 +755,7 @@ public static class ServerProbe
             ],
 
             // Qwen family and standard ChatML format derivatives
-            _ when name.Contains("qwen") || name.Contains("chatml") =>
+            _ when name.Contains("qwen") || name.Contains("chatml") || name.Contains("pulsar") =>
             [
                 "<|im_end|>",
                 "<|im_start|>",
@@ -520,7 +763,7 @@ public static class ServerProbe
                 "Assistant:"
             ],
 
-            // Meta Llama 3 / 3.1 / 3.2 / 3.3 architectures
+            // Meta Llama 3 architectures
             _ when name.Contains("llama-3") || name.Contains("llama3") =>
             [
                 "<|eot_id|>",
@@ -529,7 +772,7 @@ public static class ServerProbe
                 "Assistant:"
             ],
 
-            // Microsoft Phi-3 and Phi-4 dense architectures
+            // Microsoft Phi architectures
             _ when name.Contains("phi-4") || name.Contains("phi-3") || name.Contains("phi") =>
             [
                 "<|im_end|>",
@@ -538,7 +781,16 @@ public static class ServerProbe
                 "Assistant:"
             ],
 
-            // Universal turn-boundary fallback for unclassified models
+            // Mistral / Codestral architectures
+            _ when name.Contains("mistral") || name.Contains("codestral") =>
+            [
+                "</s>",
+                "[INST]",
+                "[/INST]",
+                "User:"
+            ],
+
+            // Universal turn-boundary fallback
             _ =>
             [
                 "User:",
