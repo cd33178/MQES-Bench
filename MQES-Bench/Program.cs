@@ -179,14 +179,11 @@ var effectiveJudgeTimeout = cliJudgeTimeout ?? requestTimeout;
 // 2. Hardware Profiling & Parameter Auto-Tuning
 // ============================================================================
 
-var serverMetadata = await ServerProbe.GetServerMetadataAsync(endpoint);
-var capabilities = await ServerProbe.InspectModelCapabilitiesAsync(endpoint);
+var serverMetadata = await ServerProbe.GetServerMetadataAsync(endpoint, generatorApiKey);
+var capabilities = await ServerProbe.InspectModelCapabilitiesAsync(endpoint, generatorApiKey, serverMetadata.ModelFile);
 if (inspectOnly)
 {
-    var meta = await ServerProbe.GetServerMetadataAsync(endpoint, generatorApiKey);
-    var caps = await ServerProbe.InspectModelCapabilitiesAsync(endpoint, generatorApiKey);
-
-    ConsoleReporter.PrintModelInspectionReport(endpoint, meta, caps);
+    ConsoleReporter.PrintModelInspectionReport(endpoint, serverMetadata, capabilities);
     return;
 }
 

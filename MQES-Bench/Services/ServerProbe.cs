@@ -167,9 +167,14 @@ public static class ServerProbe
     /// </summary>
     /// <param name="endpoint">The base URL of the OpenAI-compatible server (e.g., http://127.0.0.1:8080).</param>
     /// <param name="apiKey">Optional bearer authentication token.</param>
+    /// <param name="modelIdentifier">Model Identifier</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A populated <see cref="ModelAgentCapabilities"/> record.</returns>
-    public static async Task<ModelAgentCapabilities> InspectModelCapabilitiesAsync(string endpoint, string? apiKey = null, CancellationToken ct = default)
+    public static async Task<ModelAgentCapabilities> InspectModelCapabilitiesAsync(
+        string endpoint,
+        string? apiKey = null,
+        string? modelIdentifier = null,
+        CancellationToken ct = default)
     {
         try
         {
@@ -186,7 +191,7 @@ public static class ServerProbe
             var chatTemplate = string.Empty;
             var stopTokens = new List<string>();
 
-            // 1. Query /props (primary source for chat_template and active stop tokens in llama-server)
+            // 1. Query /props (checks if runtime exposes chat_template or stop tokens)
             try
             {
                 var propsJson = await http.GetFromJsonAsync<JsonElement>($"{baseUri}/props", ct);
@@ -208,10 +213,10 @@ public static class ServerProbe
             }
             catch
             {
-                // Degrade silently to fallback
+                // Degrade silently
             }
 
-            // 2. Fallback: Query /v1/models if chat_template was absent in /props
+            // 2. Query /v1/models if chat_template was absent in /props
             if (string.IsNullOrWhiteSpace(chatTemplate))
             {
                 try
@@ -220,6 +225,11 @@ public static class ServerProbe
                     if (modelsJson.TryGetProperty("data", out var data) && data.GetArrayLength() > 0)
                     {
                         var firstModel = data[0];
+                        if (string.IsNullOrWhiteSpace(modelIdentifier))
+                        {
+                            modelIdentifier = firstModel.GetProperty("id").GetString();
+                        }
+
                         if (firstModel.TryGetProperty("meta", out var meta) &&
                             meta.TryGetProperty("chat_template", out var metaTmpl))
                         {
@@ -233,7 +243,7 @@ public static class ServerProbe
                 }
             }
 
-            return AnalyzeTemplate(chatTemplate, stopTokens);
+            return AnalyzeTemplate(chatTemplate, stopTokens, modelIdentifier);
         }
         catch
         {
@@ -242,71 +252,90 @@ public static class ServerProbe
     }
 
     /// <summary>
-    /// Analyzes a raw Jinja chat template string to detect template families, tool calling syntax, and agent readiness.
+    /// Analyzes raw Jinja templates or infers architecture and agent readiness from the model identifier.
     /// </summary>
-    private static ModelAgentCapabilities AnalyzeTemplate(string template, List<string> stops)
+    private static ModelAgentCapabilities AnalyzeTemplate(string template, List<string> stops, string? modelIdentifier)
     {
-        if (string.IsNullOrWhiteSpace(template))
+        // If HTTP endpoints returned active stop tokens, use them; otherwise, resolve known model stop tokens
+        var resolvedStops = stops.Count > 0
+            ? stops
+            : [.. GetStopSequences(modelIdentifier)];
+
+        // 1. Direct Jinja analysis if available
+        if (!string.IsNullOrWhiteSpace(template))
         {
+            var family = template switch
+            {
+                _ when template.Contains("<|im_start|>") => "ChatML",
+                _ when template.Contains("<|start_header_id|>") => "Llama-3",
+                _ when template.Contains("[INST]") => "Mistral / Llama-2",
+                _ when template.Contains("<｜begin of sentence｜>") || template.Contains("<｜User｜>") => "DeepSeek",
+                _ when template.Contains("<start_of_turn>") => "Gemma",
+                _ when template.Contains("<|user|>") => "Phi-3 / Phi-4",
+                _ => "Generic Jinja"
+            };
+
+            var hasToolSupport = template.Contains("tools") &&
+                                 (template.Contains("tool_calls") ||
+                                  template.Contains("<tool_call>") ||
+                                  template.Contains("<tool>") ||
+                                  template.Contains("[TOOL_CALLS]") ||
+                                  template.Contains("<|python_tag|>") ||
+                                  template.Contains("action"));
+
+            var toolSyntax = "None";
+            if (template.Contains("<tool_call>"))
+                toolSyntax = "<tool_call>...</tool_call> (OpenAI/Hermes standard)";
+            else if (template.Contains("<tool>"))
+                toolSyntax = "<tool>...</tool> (Custom variant)";
+            else if (template.Contains("<|python_tag|>"))
+                toolSyntax = "<|python_tag|> (Llama 3 native)";
+            else if (template.Contains("[TOOL_CALLS]"))
+                toolSyntax = "[TOOL_CALLS] (Mistral native)";
+            else if (hasToolSupport)
+                toolSyntax = "Custom JSON Schema in body";
+
             return new ModelAgentCapabilities
             {
-                TemplateFamily = "Raw / Non-Jinja",
-                StopTokens = stops,
-                Agents = EvaluateAgents("Raw / Non-Jinja", false, "None")
+                TemplateFamily = family,
+                SupportsTools = hasToolSupport,
+                ToolCallSyntax = toolSyntax,
+                StopTokens = resolvedStops,
+                Agents = EvaluateAgents(family, hasToolSupport, toolSyntax)
             };
         }
 
-        // 1. Detect Chat Template Architecture Family
-        var family = template switch
+        // 2. Fallback: Architectural inference via model name / GGUF identifier
+        var name = (modelIdentifier ?? string.Empty).ToLowerInvariant();
+
+        var inferredFamily = name switch
         {
-            _ when template.Contains("<|im_start|>") => "ChatML",
-            _ when template.Contains("<|start_header_id|>") => "Llama-3",
-            _ when template.Contains("[INST]") => "Mistral / Llama-2",
-            _ when template.Contains("<｜begin of sentence｜>") || template.Contains("<｜User｜>") => "DeepSeek",
-            _ when template.Contains("<start_of_turn>") => "Gemma",
-            _ when template.Contains("<|user|>") => "Phi-3 / Phi-4",
-            _ => "Generic Jinja"
+            _ when name.Contains("qwen") || name.Contains("pulsar") || name.Contains("kat-coder") || name.Contains("hermes") || name.Contains("chatml") => "ChatML",
+            _ when name.Contains("llama-3") || name.Contains("llama3") => "Llama-3",
+            _ when name.Contains("deepseek") => "DeepSeek",
+            _ when name.Contains("phi-3") || name.Contains("phi-4") || name.Contains("phi") => "Phi-3 / Phi-4",
+            _ when name.Contains("mistral") || name.Contains("codestral") => "Mistral / Llama-2",
+            _ when name.Contains("gemma") => "Gemma",
+            _ => "Generic / Unknown"
         };
 
-        // 2. Identify Function / Tool Calling Support in Jinja logic
-        var hasToolSupport = template.Contains("tools") &&
-                             (template.Contains("tool_calls") ||
-                              template.Contains("<tool_call>") ||
-                              template.Contains("<tool>") ||
-                              template.Contains("[TOOL_CALLS]") ||
-                              template.Contains("<|python_tag|>") ||
-                              template.Contains("action"));
-
-        // 3. Classify exact syntax used for emitting tool calls
-        var toolSyntax = "None";
-        if (template.Contains("<tool_call>"))
+        // Modern coder families (Qwen, Pulsar, KAT-Coder, DeepSeek, Llama-3) have built-in tool calling
+        var inferredTools = inferredFamily is "ChatML" or "Llama-3" or "DeepSeek";
+        var inferredSyntax = inferredFamily switch
         {
-            toolSyntax = "<tool_call>...</tool_call> (OpenAI/Hermes standard)";
-        }
-        else if (template.Contains("<tool>"))
-        {
-            toolSyntax = "<tool>...</tool> (Custom variant)";
-        }
-        else if (template.Contains("<|python_tag|>"))
-        {
-            toolSyntax = "<|python_tag|> (Llama 3 native)";
-        }
-        else if (template.Contains("[TOOL_CALLS]"))
-        {
-            toolSyntax = "[TOOL_CALLS] (Mistral native)";
-        }
-        else if (hasToolSupport)
-        {
-            toolSyntax = "Custom JSON Schema in body";
-        }
+            "ChatML" => "<tool_call>...</tool_call> (OpenAI/Hermes/Qwen standard)",
+            "Llama-3" => "<|python_tag|> (Llama 3 native)",
+            "DeepSeek" => "Custom JSON Schema in body",
+            _ => "None"
+        };
 
         return new ModelAgentCapabilities
         {
-            TemplateFamily = family,
-            SupportsTools = hasToolSupport,
-            ToolCallSyntax = toolSyntax,
-            StopTokens = stops,
-            Agents = EvaluateAgents(family, hasToolSupport, toolSyntax)
+            TemplateFamily = $"{inferredFamily} (Inferred from Model ID)",
+            SupportsTools = inferredTools,
+            ToolCallSyntax = inferredSyntax,
+            StopTokens = resolvedStops,
+            Agents = EvaluateAgents(inferredFamily, inferredTools, inferredSyntax)
         };
     }
 
