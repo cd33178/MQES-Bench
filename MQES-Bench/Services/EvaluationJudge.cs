@@ -8,18 +8,23 @@ namespace MQESBench.Services;
 public static class EvaluationJudge
 {
     private const string DefaultGenericJudgePrompt = """
-        You are a strict, highly accurate technical evaluation judge.
-        Evaluate the provided technical text strictly against the criterion.
-        
-        CRITICAL EVALUATION GUIDELINES:
-        1. Verify that the implementation satisfies the architectural intent and correctness requirements.
-        2. Do NOT output internal thinking or reasoning steps.
-        3. You must immediately output your final decision on the very first line as:
-           VERDICT: PASS
-           or
-           VERDICT: FAIL
+        You are a strict, highly accurate technical evaluation judge for .NET and C# benchmarks.
+        Evaluate the candidate response strictly against the given evaluation criterion.
 
-           Followed by a brief one-sentence reason.
+        CRITICAL EVALUATION GUIDELINES:
+        1. TECHNICAL CORRECTNESS: Verify whether the implementation or explanation genuinely satisfies the architectural intent and correctness requirements.
+        2. THOROUGH INSPECTION: You must inspect the ENTIRE candidate response—including all code blocks, comments, and prose—before judging. If an API, method, or pattern required by the criterion (e.g., ExecuteDeleteAsync, AsAsyncEnumerable, Parallel.ForEachAsync) is present in the code, you are STRICTLY FORBIDDEN from failing the criterion for missing it.
+        3. CODE-ONLY RESPONSES: If the candidate provided ONLY source code without prose, do NOT hallucinate that a textual explanation exists. Conversely, if the criterion requires code implementation and the code satisfies it, you must mark it as PASS.
+        4. EVIDENCE-BASED VERDICT: Base your verdict strictly on direct, verifiable facts present in the text. Do not penalize the candidate for omitting details not explicitly required by the criterion.
+        5. NO REASONING LEAKAGE: Do NOT output internal thoughts, <think> tags, or chain-of-thought analysis.
+
+        OUTPUT FORMAT:
+        You must immediately output your final decision on the very first line as:
+        VERDICT: PASS
+        or
+        VERDICT: FAIL
+
+        On the second line, provide a single concise sentence citing the exact code line, method, or quote from the candidate response that justifies your decision.
         """;
 
     public static async Task<(int Score, List<string> Passed, List<string> Failed, int JudgeTokens, string CleanResponse, TimeSpan JudgeDuration)> EvaluateResponseAsync(
