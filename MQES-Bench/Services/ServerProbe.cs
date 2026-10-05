@@ -531,7 +531,7 @@ public static class ServerProbe
                 SupportsTools = hasToolSupport,
                 ToolCallSyntax = toolSyntax,
                 StopTokens = resolvedStops,
-                Agents = EvaluateAgents(family, hasToolSupport, toolSyntax, modelIdentifier)
+                Agents = EvaluateAgents(family, hasToolSupport, modelIdentifier)
             };
         }
 
@@ -575,14 +575,14 @@ public static class ServerProbe
             SupportsTools = isNativeToolTrained,
             ToolCallSyntax = inferredSyntax,
             StopTokens = resolvedStops,
-            Agents = EvaluateAgents(inferredFamily, isNativeToolTrained, inferredSyntax, modelIdentifier)
+            Agents = EvaluateAgents(inferredFamily, isNativeToolTrained, modelIdentifier)
         };
     }
 
     /// <summary>
     /// Evaluates compatibility across 12 distinct coding agents, autonomous frameworks, and IDE assistants.
     /// </summary>
-    private static List<AgentCompatibility> EvaluateAgents(string family, bool hasVerifiedTools, string syntax, string? modelIdentifier)
+    private static List<AgentCompatibility> EvaluateAgents(string family, bool hasVerifiedTools, string? modelIdentifier)
     {
         var list = new List<AgentCompatibility>();
         var name = (modelIdentifier ?? string.Empty).ToLowerInvariant();
@@ -592,77 +592,69 @@ public static class ServerProbe
         // --- Category 1: Strict Function Calling / MCP / ACI Dependent Agents ---
 
         // 1. OpenCode: Strict requirement for JSON schema tool calling
-        var openCodeReady = hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "OpenCode",
-            Status: openCodeReady ? "READY" : "INCOMPATIBLE",
-            Details: openCodeReady ? "Tool calling schemas supported" : "No tool calling support (fails file creation)",
-            IsReady: openCodeReady
+            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
+            Details: hasVerifiedTools ? "Tool calling schemas supported" : "No tool calling support (fails file creation)",
+            IsReady: hasVerifiedTools
         ));
 
         // 2. Goose (Block): Model Context Protocol & tool invocation framework
-        var gooseReady = hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "Goose",
-            Status: gooseReady ? "READY" : "INCOMPATIBLE",
-            Details: gooseReady ? "Native MCP & tool execution ready" : "Cannot invoke MCP developer toolkits",
-            IsReady: gooseReady
+            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
+            Details: hasVerifiedTools ? "Native MCP & tool execution ready" : "Cannot invoke MCP developer toolkits",
+            IsReady: hasVerifiedTools
         ));
 
         // 3. OpenHands (OpenDevin): Autonomous runtime agent executing shell and file edits
-        var openHandsReady = hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "OpenHands",
-            Status: openHandsReady ? "READY" : "INCOMPATIBLE",
-            Details: openHandsReady ? "Structured action stream supported" : "Action serialization fails without tools",
-            IsReady: openHandsReady
+            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
+            Details: hasVerifiedTools ? "Structured action stream supported" : "Action serialization fails without tools",
+            IsReady: hasVerifiedTools
         ));
 
         // 4. SWE-agent (Princeton): Autonomous agent executing bash/editor via Agent-Computer Interface
-        var sweAgentReady = hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "SWE-agent",
-            Status: sweAgentReady ? "READY" : "INCOMPATIBLE",
-            Details: sweAgentReady ? "ACI command generation verified" : "Cannot execute ACI tool commands",
-            IsReady: sweAgentReady
+            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
+            Details: hasVerifiedTools ? "ACI command generation verified" : "Cannot execute ACI tool commands",
+            IsReady: hasVerifiedTools
         ));
 
         // 5. Plandex: Multi-file development engine with sandboxed branch planning
-        var plandexReady = hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "Plandex",
-            Status: plandexReady ? "READY" : "INCOMPATIBLE",
-            Details: plandexReady ? "Multi-file planning & tool execution ready" : "Fails branch plan serialization",
-            IsReady: plandexReady
+            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
+            Details: hasVerifiedTools ? "Multi-file planning & tool execution ready" : "Fails branch plan serialization",
+            IsReady: hasVerifiedTools
         ));
 
         // 6. Cline: Autonomous VS Code agent requiring shell and filesystem tools
-        var clineReady = hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "Cline",
-            Status: clineReady ? "READY" : "INCOMPATIBLE",
-            Details: clineReady ? "Native tool calling supported" : "Cannot invoke file/system tools",
-            IsReady: clineReady
+            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
+            Details: hasVerifiedTools ? "Native tool calling supported" : "Cannot invoke file/system tools",
+            IsReady: hasVerifiedTools
         ));
 
         // --- Category 2: Hybrid Agents (Tool mode for autonomous actions, fallback for diffs) ---
 
         // 7. Cursor / Windsurf: Full agentic IDE mode vs standard inline diffs
-        var cursorAgentReady = hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "Cursor/Windsurf",
-            Status: cursorAgentReady ? "READY" : "LIMITED",
-            Details: cursorAgentReady ? "Autonomous agent mode supported" : "Degrades to standard inline diff mode",
-            IsReady: cursorAgentReady
+            Status: hasVerifiedTools ? "READY" : "LIMITED",
+            Details: hasVerifiedTools ? "Autonomous agent mode supported" : "Degrades to standard inline diff mode",
+            IsReady: hasVerifiedTools
         ));
 
         // 8. Avante.nvim: Neovim autonomous codebase assistant
-        var avanteReady = hasVerifiedTools;
         list.Add(new AgentCompatibility(
             Name: "Avante.nvim",
-            Status: avanteReady ? "READY" : "LIMITED",
-            Details: avanteReady ? "Full codebase planning & tool support" : "Limited to direct buffer completion",
-            IsReady: avanteReady
+            Status: hasVerifiedTools ? "READY" : "LIMITED",
+            Details: hasVerifiedTools ? "Full codebase planning & tool support" : "Limited to direct buffer completion",
+            IsReady: hasVerifiedTools
         ));
 
         // --- Category 3: Diff, Text, and Chat-Based Agents (Operate without Tool Calling) ---

@@ -280,33 +280,33 @@ var isDedicatedJudge = !string.Equals(endpoint, effectiveJudgeEndpoint, StringCo
 
 // Format all registered agents dynamically with a 16-character left column alignment
 var formattedAgents = string.Join(Environment.NewLine, capabilities.Agents.Select(a =>
-    $"  {a.Name} Agent".PadRight(16) + $": {a.Status,-7} ({a.Details})"));
+    $"  {a.Name} Agent".PadRight(22) + $": {a.Status,-7} ({a.Details})"));
 
 Console.WriteLine($"""
 ================================================================================
   LLama-Server HTTP Evaluator (.NET 10 / C# 14)
 ================================================================================
-  Host System   : {Environment.MachineName} ({profile.PlatformType})
-  CPU Model     : {profile.CpuName} ({profile.LogicalCores} Logical Cores)
-  RAM Topology  : {totalRamGb:F1} GB Total (~{profile.EstimatedDimms} DIMMs @ Max {profile.RamMaxWatts:F0}W) - {ramLoadPct}% loaded
-  System RAM    : {usedRamGb:F1} GB in use / {totalRamGb:F1} GB Total ({ramLoadPct}% loaded)
-  CLR Runtime   : .NET {Environment.Version} (GC: {(GCSettings.IsServerGC ? "Server GC" : "Workstation GC")})
+  Host System         : {Environment.MachineName} ({profile.PlatformType})
+  CPU Model           : {profile.CpuName} ({profile.LogicalCores} Logical Cores)
+  RAM Topology        : {totalRamGb:F1} GB Total (~{profile.EstimatedDimms} DIMMs @ Max {profile.RamMaxWatts:F0}W) - {ramLoadPct}% loaded
+  System RAM          : {usedRamGb:F1} GB in use / {totalRamGb:F1} GB Total ({ramLoadPct}% loaded)
+  CLR Runtime         : .NET {Environment.Version} (GC: {(GCSettings.IsServerGC ? "Server GC" : "Workstation GC")})
 --------------------------------------------------------------------------------
-  Suite File    : {Path.GetFileName(jsonFilePath)} ({suiteTitle})
-  LLM Endpoint  : {endpoint}
-  Model         : {serverMetadata.ModelFile} ({serverMetadata.Quantization})
-  Template/Jinja: {capabilities.TemplateFamily} (Tools: {(capabilities.SupportsTools ? "Supported" : "None")})
-  Tool Syntax   : {capabilities.ToolCallSyntax}
+  Suite File          : {Path.GetFileName(jsonFilePath)} ({suiteTitle})
+  LLM Endpoint        : {endpoint}
+  Model               : {serverMetadata.ModelFile} ({serverMetadata.Quantization})
+  Template/Jinja      : {capabilities.TemplateFamily} (Tools: {(capabilities.SupportsTools ? "Supported" : "None")})
+  Tool Syntax         : {capabilities.ToolCallSyntax}
 {formattedAgents}
-  Stop Tokens   : {(capabilities.StopTokens.Count > 0 ? string.Join(", ", capabilities.StopTokens) : "Default fallback")}
-  Judge Config  : {effectiveJudgeEndpoint} [Model: {effectiveJudgeModel}]{(isDedicatedJudge ? " (External Judge)" : " (Self-Judge)")}
-  Capacity Fact : {profile.HardwareCapacityFactor:F2}x baseline multiplier
-  Power Profile : TDP Max: {profile.CpuMaxWatts:F0}W | Mult: {profile.InstructionMultiplier:F2}x | PSU: {profile.PsuEfficiency * 100:F0}%
-  Context Size  : {serverMetadata.ContextSize:N0} tokens | Max Output: {activeMaxOutputTokens:N0} tokens
-  Sampler Auto  : Temp: {tuned.Temperature:F2} | TopP: {tuned.TopP:F2} | Strategy: {tuned.ProfileDescription}
-  Power Rate    : ${costPerKwh:F2} USD / kWh
-  Mode          : {(noJudge ? "Throughput Only (--no-judge)" : "Full Criteria Evaluation (MQES Enabled)")}
-  Started At    : {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+  Stop Tokens         : {(capabilities.StopTokens.Count > 0 ? string.Join(", ", capabilities.StopTokens).Replace("\r", " ").Replace("\n", " ") : "Default fallback")}
+  Judge Config        : {effectiveJudgeEndpoint} [Model: {effectiveJudgeModel}]{(isDedicatedJudge ? " (External Judge)" : " (Self-Judge)")}
+  Capacity Fact       : {profile.HardwareCapacityFactor:F2}x baseline multiplier
+  Power Profile       : TDP Max: {profile.CpuMaxWatts:F0}W | Mult: {profile.InstructionMultiplier:F2}x | PSU: {profile.PsuEfficiency * 100:F0}%
+  Context Size        : {serverMetadata.ContextSize:N0} tokens | Max Output: {activeMaxOutputTokens:N0} tokens
+  Sampler Auto        : Temp: {tuned.Temperature:F2} | TopP: {tuned.TopP:F2} | Strategy: {tuned.ProfileDescription}
+  Power Rate          : ${costPerKwh:F2} USD / kWh
+  Mode                : {(noJudge ? "Throughput Only (--no-judge)" : "Full Criteria Evaluation (MQES Enabled)")}
+  Started At          : {DateTime.Now:yyyy-MM-dd HH:mm:ss}
 ================================================================================
 """);
 
