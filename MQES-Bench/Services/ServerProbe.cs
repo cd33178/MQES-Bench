@@ -33,12 +33,13 @@ public static class ServerProbe
             using var http = new HttpClient();
             http.Timeout = TimeSpan.FromSeconds(5);
 
-            if (!string.IsNullOrWhiteSpace(apiKey) && !string.Equals(apiKey, "not-needed", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(apiKey) &&
+                !string.Equals(apiKey, "not-needed", StringComparison.OrdinalIgnoreCase))
             {
                 http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             }
 
-            // 1. GET /v1/models — Discovers model file, quantization tags, and GGUF architectural metadata
+            // 1. GET /v1/models — Discovers model file, quantization tags, and architecture
             try
             {
                 var modelsJson = await http.GetFromJsonAsync<JsonElement>($"{baseUri}/v1/models");
@@ -98,10 +99,10 @@ public static class ServerProbe
             }
             catch
             {
-                // Degrade silently if /v1/models is unavailable
+                /* Degrade silently if /v1/models is hidden */
             }
 
-            // 2. GET /slots — Reads active runtime sampler arguments in modern llama-server builds
+            // 2. GET /slots — Reads active runtime sampler arguments
             var samplersResolved = false;
             try
             {
@@ -113,7 +114,8 @@ public static class ServerProbe
 
                     if (firstSlot.TryGetProperty("params", out var slotParams))
                     {
-                        if (slotParams.TryGetProperty("temp", out var t) || slotParams.TryGetProperty("temperature", out t))
+                        if (slotParams.TryGetProperty("temp", out var t) ||
+                            slotParams.TryGetProperty("temperature", out t))
                         {
                             metadata.ServerTemperature = t.GetDouble();
                         }
@@ -144,10 +146,10 @@ public static class ServerProbe
             }
             catch
             {
-                // Degrade silently to /props fallback
+                /* Degrade silently */
             }
 
-            // 3. GET /props — Legacy endpoint fallback for context limits and parameters
+            // 3. GET /props — Context limits and fallback generation settings
             try
             {
                 var propsJson = await http.GetFromJsonAsync<JsonElement>($"{baseUri}/props");
@@ -202,7 +204,7 @@ public static class ServerProbe
         }
         catch
         {
-            // Safe fallback preserves default metadata
+             // Preserves default metadata
         }
 
         return metadata;
@@ -218,10 +220,10 @@ public static class ServerProbe
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A populated <see cref="ModelAgentCapabilities"/> record.</returns>
     public static async Task<ModelAgentCapabilities> InspectModelCapabilitiesAsync(
-        string endpoint,
-        string? apiKey = null,
-        string? modelIdentifier = null,
-        CancellationToken ct = default)
+            string endpoint,
+            string? apiKey = null,
+            string? modelIdentifier = null,
+            CancellationToken ct = default)
     {
         try
         {
@@ -237,11 +239,19 @@ public static class ServerProbe
 
             var chatTemplate = string.Empty;
             var stopTokens = new List<string>();
+            var serverCapsSupportsTools = false;
 
-            // 1. Query /props for runtime chat_template and active stop sequences
+            // 1. Query /props for runtime template and tool capabilities
             try
             {
                 var propsJson = await http.GetFromJsonAsync<JsonElement>($"{baseUri}/props", ct);
+
+                if (propsJson.TryGetProperty("chat_template_caps", out var caps) &&
+                    caps.TryGetProperty("supports_tool_calls", out var stc))
+                {
+                    serverCapsSupportsTools = stc.GetBoolean();
+                }
+
                 if (propsJson.TryGetProperty("default_generation_settings", out var genSettings))
                 {
                     if (genSettings.TryGetProperty("chat_template", out var tmpl))
@@ -260,7 +270,7 @@ public static class ServerProbe
             }
             catch
             {
-                // Degrade silently
+                 // Degrade silently
             }
 
             // 2. Query /v1/models if chat_template was omitted in /props
@@ -290,7 +300,28 @@ public static class ServerProbe
                 }
             }
 
-            return AnalyzeTemplate(chatTemplate, stopTokens, modelIdentifier);
+            var probeResult = await RunActiveProbeAsync(endpoint, apiKey, ct);
+
+            var family = InferTemplateFamily(chatTemplate, modelIdentifier);
+
+            var toolsVerified = probeResult.HasNativeToolCalls || (serverCapsSupportsTools && probeResult.ExecutedSuccessfully);
+
+            var toolSyntax = probeResult.DetectedToolSyntax != "None"
+                ? probeResult.DetectedToolSyntax
+                : (toolsVerified ? "Native OpenAI JSON (tool_calls validated)" : "None");
+
+            var resolvedStops = stopTokens.Count > 0
+                ? stopTokens
+                : [.. GetStopSequences(modelIdentifier)];
+
+            return new ModelAgentCapabilities
+            {
+                TemplateFamily = family,
+                SupportsTools = toolsVerified,
+                ToolCallSyntax = toolSyntax,
+                StopTokens = resolvedStops,
+                Agents = EvaluateAgents(family, toolsVerified, modelIdentifier)
+            };
         }
         catch
         {
@@ -303,26 +334,26 @@ public static class ServerProbe
     /// prompt-to-token throughput, and round-trip execution latency.
     /// </summary>
     public static async Task<ModelProbeResult> RunActiveProbeAsync(
-        string endpoint,
-        string? apiKey = null,
-        CancellationToken ct = default)
+            string endpoint,
+            string? apiKey = null,
+            CancellationToken ct = default)
     {
         var uri = new Uri(endpoint);
         var completionsUrl = $"{uri.Scheme}://{uri.Authority}/v1/chat/completions";
 
         using var http = new HttpClient();
-        http.Timeout = TimeSpan.FromSeconds(25);
+        http.Timeout = TimeSpan.FromSeconds(30);
 
         if (!string.IsNullOrWhiteSpace(apiKey) && !string.Equals(apiKey, "not-needed", StringComparison.OrdinalIgnoreCase))
         {
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         }
 
-        // Lightweight payload declaring a dummy filesystem tool
         var payload = new
         {
             messages = new[]
             {
+                new { role = "system", content = "You are a coding agent. Always execute the requested tool." },
                 new { role = "user", content = "Use the write_file tool to save 'ok' into 'probe.txt'." }
             },
             tools = new[]
@@ -348,7 +379,7 @@ public static class ServerProbe
                 }
             },
             tool_choice = "auto",
-            max_tokens = 64,
+            max_tokens = 512,
             temperature = 0.0
         };
 
@@ -365,7 +396,8 @@ public static class ServerProbe
                 return new ModelProbeResult
                 {
                     ExecutedSuccessfully = false,
-                    ErrorMessage = $"HTTP {(int)response.StatusCode}: {response.ReasonPhrase}"
+                    ErrorMessage = $"HTTP {(int)response.StatusCode}: {response.ReasonPhrase}",
+                    LatencyMs = sw.Elapsed.TotalMilliseconds
                 };
             }
 
@@ -373,7 +405,6 @@ public static class ServerProbe
             using var doc = JsonDocument.Parse(jsonStr);
             var root = doc.RootElement;
 
-            // Extract token usage metrics
             var promptTokens = 0;
             var completionTokens = 0;
             if (root.TryGetProperty("usage", out var usage))
@@ -392,8 +423,7 @@ public static class ServerProbe
             var elapsedSec = Math.Max(0.001, sw.Elapsed.TotalSeconds);
             var tps = completionTokens > 0 ? completionTokens / elapsedSec : 0.0;
 
-            // Inspect response choices
-            var hasNativeTools = false;
+            var hasValidNativeTools = false;
             var detectedSyntax = "None";
             var rawContent = string.Empty;
             var finishReason = "unknown";
@@ -408,11 +438,32 @@ public static class ServerProbe
 
                 if (choice.TryGetProperty("message", out var msg))
                 {
-                    // Check 1: Standard OpenAI structured tool_calls array
                     if (msg.TryGetProperty("tool_calls", out var toolCalls) && toolCalls.GetArrayLength() > 0)
                     {
-                        hasNativeTools = true;
-                        detectedSyntax = "Native OpenAI JSON (tool_calls array)";
+                        var firstCall = toolCalls[0];
+                        if (firstCall.TryGetProperty("function", out var fn))
+                        {
+                            var fnName = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
+                            var fnArgs = fn.TryGetProperty("arguments", out var a) ? a.GetString() : null;
+
+                            if (fnName == "write_file" && !string.IsNullOrWhiteSpace(fnArgs))
+                            {
+                                try
+                                {
+                                    using var argsDoc = JsonDocument.Parse(fnArgs);
+                                    if (argsDoc.RootElement.TryGetProperty("path", out _) &&
+                                        argsDoc.RootElement.TryGetProperty("content", out _))
+                                    {
+                                        hasValidNativeTools = true;
+                                        detectedSyntax = "Native OpenAI JSON (tool_calls validated)";
+                                    }
+                                }
+                                catch
+                                {
+                                    // ignored
+                                }
+                            }
+                        }
                     }
 
                     if (msg.TryGetProperty("content", out var textContent))
@@ -422,22 +473,18 @@ public static class ServerProbe
                 }
             }
 
-            // Check 2: Embedded text-based tool syntax if the array is empty
-            if (!hasNativeTools && !string.IsNullOrWhiteSpace(rawContent))
+            if (!hasValidNativeTools && !string.IsNullOrWhiteSpace(rawContent))
             {
                 if (rawContent.Contains("<tool_call>"))
                 {
-                    hasNativeTools = true;
                     detectedSyntax = "<tool_call>...</tool_call> (ChatML text format)";
                 }
                 else if (rawContent.Contains("call:write_file") || rawContent.Contains("call:"))
                 {
-                    hasNativeTools = true;
                     detectedSyntax = "call:<function>{...} (Gemma native format)";
                 }
                 else if (rawContent.Contains("[TOOL_CALLS]"))
                 {
-                    hasNativeTools = true;
                     detectedSyntax = "[TOOL_CALLS] (Mistral text format)";
                 }
             }
@@ -445,7 +492,7 @@ public static class ServerProbe
             return new ModelProbeResult
             {
                 ExecutedSuccessfully = true,
-                HasNativeToolCalls = hasNativeTools,
+                HasNativeToolCalls = hasValidNativeTools,
                 DetectedToolSyntax = detectedSyntax,
                 RawResponseContent = rawContent.Trim().Replace("\r", " ").Replace("\n", " "),
                 TokensPerSecond = tps,
@@ -468,245 +515,152 @@ public static class ServerProbe
     }
 
     /// <summary>
-    /// Analyzes raw Jinja templates or infers architecture, tool semantics, and agent readiness from the model identifier.
+    /// Identifies chat template family.
     /// </summary>
-    private static ModelAgentCapabilities AnalyzeTemplate(string template, List<string> stops, string? modelIdentifier)
+    private static string InferTemplateFamily(string template, string? modelIdentifier)
     {
-        var resolvedStops = stops.Count > 0
-            ? stops
-            : [.. GetStopSequences(modelIdentifier)];
-
-        // 1. Direct Jinja analysis if available
-        if (!string.IsNullOrWhiteSpace(template))
+        if (template.Contains("<|im_start|>"))
         {
-            var family = template switch
-            {
-                _ when template.Contains("<|im_start|>") => "ChatML",
-                _ when template.Contains("<|start_header_id|>") => "Llama-3",
-                _ when template.Contains("[INST]") => "Mistral / Llama-2",
-                _ when template.Contains("<｜begin of sentence｜>") || template.Contains("<｜User｜>") => "DeepSeek",
-                _ when template.Contains("<start_of_turn>") => "Gemma",
-                _ when template.Contains("<|user|>") => "Phi-3 / Phi-4",
-                _ => "Generic Jinja"
-            };
-
-            var hasToolSupport = template.Contains("tools") &&
-                                 (template.Contains("tool_calls") ||
-                                  template.Contains("<tool_call>") ||
-                                  template.Contains("<tool>") ||
-                                  template.Contains("[TOOL_CALLS]") ||
-                                  template.Contains("<|python_tag|>") ||
-                                  template.Contains("action") ||
-                                  template.Contains("call:"));
-
-            var toolSyntax = "None";
-            if (template.Contains("<tool_call>"))
-            {
-                toolSyntax = "<tool_call>...</tool_call> (OpenAI/Hermes standard)";
-            }
-            else if (template.Contains("<tool>"))
-            {
-                toolSyntax = "<tool>...</tool> (Custom variant)";
-            }
-            else if (template.Contains("<|python_tag|>"))
-            {
-                toolSyntax = "<|python_tag|> (Llama 3 native)";
-            }
-            else if (template.Contains("[TOOL_CALLS]"))
-            {
-                toolSyntax = "[TOOL_CALLS] (Mistral native)";
-            }
-            else if (family == "Gemma" && hasToolSupport)
-            {
-                toolSyntax = "call:<function>{...} (Gemma native)";
-            }
-            else if (hasToolSupport)
-            {
-                toolSyntax = "Custom JSON Schema in body";
-            }
-
-            return new ModelAgentCapabilities
-            {
-                TemplateFamily = family,
-                SupportsTools = hasToolSupport,
-                ToolCallSyntax = toolSyntax,
-                StopTokens = resolvedStops,
-                Agents = EvaluateAgents(family, hasToolSupport, modelIdentifier)
-            };
+            return "ChatML";
         }
 
-        // 2. Fallback: Architectural inference via model name / GGUF identifier
+        if (template.Contains("<|start_header_id|>"))
+        {
+            return "Llama-3";
+        }
+
+        if (template.Contains("[INST]"))
+        {
+            return "Mistral / Llama-2";
+        }
+
+        if (template.Contains("<start_of_turn>"))
+        {
+            return "Gemma";
+        }
+
+        if (template.Contains("<｜begin of sentence｜>") || template.Contains("<｜User｜>"))
+        {
+            return "DeepSeek";
+        }
+
+        if (template.Contains("<|user|>"))
+        {
+            return "Phi-3 / Phi-4";
+        }
+
         var name = (modelIdentifier ?? string.Empty).ToLowerInvariant();
-
-        var inferredFamily = name switch
+        if (name.Contains("qwen") || name.Contains("hermes") || name.Contains("chatml"))
         {
-            _ when name.Contains("qwen") || name.Contains("pulsar") || name.Contains("kat-coder") || name.Contains("hermes") || name.Contains("chatml") => "ChatML",
-            _ when name.Contains("llama-3") || name.Contains("llama3") => "Llama-3",
-            _ when name.Contains("deepseek") => "DeepSeek",
-            _ when name.Contains("phi-3") || name.Contains("phi-4") || name.Contains("phi") => "Phi-3 / Phi-4",
-            _ when name.Contains("mistral") || name.Contains("codestral") => "Mistral / Llama-2",
-            _ when name.Contains("gemma") => "Gemma",
-            _ => "Generic / Unknown"
-        };
+            return "ChatML";
+        }
 
-        // Identifies whether the model is an official Instruction/Chat-tuned build
-        var isInstructTuned = name.Contains("-it") ||
-                              name.Contains("instruct") ||
-                              name.Contains("chat") ||
-                              name.Contains("hermes") ||
-                              name.Contains("command-r");
-
-        // Major frontier instruct models natively support function calling
-        var isNativeToolTrained = isInstructTuned && inferredFamily is "Gemma" or "ChatML" or "Llama-3" or "DeepSeek" or "Mistral / Llama-2";
-
-        var inferredSyntax = (isNativeToolTrained, inferredFamily) switch
+        if (name.Contains("llama-3") || name.Contains("llama3"))
         {
-            (true, "Gemma") => "call:<function>{...} (Gemma native)",
-            (true, "ChatML") => "<tool_call>...</tool_call> (OpenAI/Hermes/Qwen standard)",
-            (true, "Llama-3") => "<|python_tag|> (Llama 3 native)",
-            (true, "Mistral / Llama-2") => "[TOOL_CALLS] (Mistral native)",
-            (true, "DeepSeek") => "Custom JSON Schema in body",
-            _ => "None"
-        };
+            return "Llama-3";
+        }
 
-        return new ModelAgentCapabilities
+        if (name.Contains("deepseek"))
         {
-            TemplateFamily = $"{inferredFamily} (Inferred from Model ID)",
-            SupportsTools = isNativeToolTrained,
-            ToolCallSyntax = inferredSyntax,
-            StopTokens = resolvedStops,
-            Agents = EvaluateAgents(inferredFamily, isNativeToolTrained, modelIdentifier)
-        };
+            return "DeepSeek";
+        }
+
+        if (name.Contains("mistral") || name.Contains("codestral"))
+        {
+            return "Mistral";
+        }
+
+        if (name.Contains("gemma"))
+        {
+            return "Gemma";
+        }
+
+        return name.Contains("phi")
+            ? "Phi-3 / Phi-4"
+            : "Standard";
     }
 
     /// <summary>
     /// Evaluates compatibility across 12 distinct coding agents, autonomous frameworks, and IDE assistants.
     /// </summary>
-    private static List<AgentCompatibility> EvaluateAgents(string family, bool hasVerifiedTools, string? modelIdentifier)
+    private static List<AgentCompatibility> EvaluateAgents(string family, bool toolsVerified, string? modelIdentifier)
     {
         var list = new List<AgentCompatibility>();
-        var name = (modelIdentifier ?? string.Empty).ToLowerInvariant();
 
-        var isInstruct = name.Contains("-it") || name.Contains("instruct") || name.Contains("chat");
+        var toolStatus = toolsVerified ? "READY" : "INCOMPATIBLE";
+        var toolReason = toolsVerified
+            ? "Native OpenAI tool_calls verified with valid JSON arguments"
+            : "No tool calling support (fails file creation)";
 
-        // --- Category 1: Strict Function Calling / MCP / ACI Dependent Agents ---
+        var isModernTemplate = family is "ChatML" or "Mistral" or "Llama-3" or "Gemma" or "DeepSeek" || (toolsVerified && family == "Standard");
 
-        // 1. OpenCode: Strict requirement for JSON schema tool calling
-        list.Add(new AgentCompatibility(
-            Name: "OpenCode",
-            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
-            Details: hasVerifiedTools ? "Tool calling schemas supported" : "No tool calling support (fails file creation)",
-            IsReady: hasVerifiedTools
-        ));
+        // 1. Autonomous Multi-Tool Coding Agents (CLI & IDE)
+        list.Add(Create("Claude Code", toolStatus,
+            toolsVerified ? "Terminal tool calling and multi-turn diff execution ready" : "Requires verified tool calls for terminal automation"));
 
-        // 2. Goose (Block): Model Context Protocol & tool invocation framework
-        list.Add(new AgentCompatibility(
-            Name: "Goose",
-            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
-            Details: hasVerifiedTools ? "Native MCP & tool execution ready" : "Cannot invoke MCP developer toolkits",
-            IsReady: hasVerifiedTools
-        ));
+        list.Add(Create("Claude Desktop", toolStatus,
+            toolsVerified ? "Native tool-calling verified for Model Context Protocol (MCP)" : "Cannot invoke MCP developer toolkits"));
 
-        // 3. OpenHands (OpenDevin): Autonomous runtime agent executing shell and file edits
-        list.Add(new AgentCompatibility(
-            Name: "OpenHands",
-            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
-            Details: hasVerifiedTools ? "Structured action stream supported" : "Action serialization fails without tools",
-            IsReady: hasVerifiedTools
-        ));
+        list.Add(Create("Cline", toolStatus,
+            toolsVerified ? "Native OpenAI tool_calls verified with valid JSON arguments" : "Cannot invoke file/system tools"));
 
-        // 4. SWE-agent (Princeton): Autonomous agent executing bash/editor via Agent-Computer Interface
-        list.Add(new AgentCompatibility(
-            Name: "SWE-agent",
-            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
-            Details: hasVerifiedTools ? "ACI command generation verified" : "Cannot execute ACI tool commands",
-            IsReady: hasVerifiedTools
-        ));
+        list.Add(Create("Goose", toolStatus,
+            toolsVerified ? "Native tool_calls verified for developer toolkits" : "Cannot invoke MCP developer toolkits"));
 
-        // 5. Plandex: Multi-file development engine with sandboxed branch planning
-        list.Add(new AgentCompatibility(
-            Name: "Plandex",
-            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
-            Details: hasVerifiedTools ? "Multi-file planning & tool execution ready" : "Fails branch plan serialization",
-            IsReady: hasVerifiedTools
-        ));
+        list.Add(Create("Hermes Agent", toolsVerified || family == "ChatML" ? "READY" : "LIMITED",
+            "Supports ChatML / Nous Hermes function calling protocols"));
 
-        // 6. Cline: Autonomous VS Code agent requiring shell and filesystem tools
-        list.Add(new AgentCompatibility(
-            Name: "Cline",
-            Status: hasVerifiedTools ? "READY" : "INCOMPATIBLE",
-            Details: hasVerifiedTools ? "Native tool calling supported" : "Cannot invoke file/system tools",
-            IsReady: hasVerifiedTools
-        ));
+        list.Add(Create("OpenCode", toolStatus, toolReason));
 
-        // --- Category 2: Hybrid Agents (Tool mode for autonomous actions, fallback for diffs) ---
+        list.Add(Create("OpenHands", toolStatus,
+            toolsVerified ? "Action serialization verified" : "Action serialization fails without tools"));
 
-        // 7. Cursor / Windsurf: Full agentic IDE mode vs standard inline diffs
-        list.Add(new AgentCompatibility(
-            Name: "Cursor/Windsurf",
-            Status: hasVerifiedTools ? "READY" : "LIMITED",
-            Details: hasVerifiedTools ? "Autonomous agent mode supported" : "Degrades to standard inline diff mode",
-            IsReady: hasVerifiedTools
-        ));
+        list.Add(Create("Roo Code", toolStatus,
+            toolsVerified ? "Multi-mode autonomous tool calling and AST inspection verified" : toolReason));
 
-        // 8. Avante.nvim: Neovim autonomous codebase assistant
-        list.Add(new AgentCompatibility(
-            Name: "Avante.nvim",
-            Status: hasVerifiedTools ? "READY" : "LIMITED",
-            Details: hasVerifiedTools ? "Full codebase planning & tool support" : "Limited to direct buffer completion",
-            IsReady: hasVerifiedTools
-        ));
+        list.Add(Create("SWE-agent", toolStatus,
+            toolsVerified ? "ACI command generation via function calls" : "Cannot execute ACI tool commands"));
 
-        // --- Category 3: Diff, Text, and Chat-Based Agents (Operate without Tool Calling) ---
+        // 2. Diff & Edit Format Agents (Aider / Mentat)
+        var diffStatus = isModernTemplate || toolsVerified ? "READY" : "LIMITED";
+        list.Add(Create("Aider", diffStatus,
+            diffStatus == "READY" ? "Template supports multi-turn search/replace diff editing" : "Fallback to --edit-format whole"));
 
-        // 9. Aider: Native SEARCH/REPLACE git diff edits
-        var aiderReady = family is "ChatML" or "Llama-3" or "DeepSeek" or "Phi-3 / Phi-4" or "Gemma" or "Mistral / Llama-2" || hasVerifiedTools;
-        list.Add(new AgentCompatibility(
-            Name: "Aider",
-            Status: aiderReady ? "READY" : "LIMITED",
-            Details: aiderReady ? "Native SEARCH/REPLACE diff mode" : "Fallback to --edit-format whole",
-            IsReady: aiderReady
-        ));
+        list.Add(Create("Mentat", diffStatus,
+            diffStatus == "READY" ? "Template supports multi-turn search/replace diff editing" : "May fail AST diff application"));
 
-        // 10. Mentat: Interactive terminal assistant operating via git diffs and AST context
-        var mentatReady = family is "ChatML" or "Llama-3" or "DeepSeek" or "Phi-3 / Phi-4" or "Gemma" || hasVerifiedTools;
-        list.Add(new AgentCompatibility(
-            Name: "Mentat",
-            Status: mentatReady ? "READY" : "LIMITED",
-            Details: mentatReady ? "Git diff & context parsing supported" : "May fail AST diff application",
-            IsReady: mentatReady
-        ));
+        // 3. Workspace Context & Desktop Assistants
+        list.Add(Create("Continue", "READY", "Chat, code completion, and context (@workspace) ready"));
 
-        // 11. Continue: Context-aware IDE chat and slash commands (@workspace)
-        var continueReady = !family.Contains("Raw") && !family.Contains("Unknown");
-        list.Add(new AgentCompatibility(
-            Name: "Continue",
-            Status: continueReady ? "READY" : "BASIC",
-            Details: continueReady ? "Chat and context (@workspace) ready" : "Raw autocomplete only",
-            IsReady: continueReady
-        ));
+        list.Add(Create("Avante.nvim", toolsVerified ? "READY" : "LIMITED",
+            toolsVerified ? "Full project codebase planning & AST tool support" : "Limited to direct buffer completion"));
 
-        // 12. Copilot CLI: Terminal shell and PowerShell command generation
-        var copilotCliReady = isInstruct || family is "ChatML" or "Llama-3" or "DeepSeek" or "Gemma";
-        list.Add(new AgentCompatibility(
-            Name: "Copilot CLI",
-            Status: copilotCliReady ? "READY" : "LIMITED",
-            Details: copilotCliReady ? "Precise command generation" : "May emit conversational text",
-            IsReady: copilotCliReady
-        ));
+        list.Add(Create("Cursor/Windsurf", toolsVerified ? "READY" : "LIMITED",
+            toolsVerified ? "Autonomous multi-file editing mode" : "Degrades to standard inline diff mode"));
+
+        list.Add(Create("Plandex", toolsVerified ? "READY" : "LIMITED",
+            toolsVerified ? "Multi-file transaction planning and tool execution" : "Fails branch plan serialization"));
+
+        // 4. Terminal Command Line Shell Agents
+        var lower = (modelIdentifier ?? string.Empty).ToLowerInvariant();
+        var isInstruct = lower.Contains("instruct") || lower.Contains("coder") || lower.Contains("-it") || lower.Contains("_it") || lower.Contains("sonnet");
+        var cliStatus = isInstruct || toolsVerified ? "READY" : "LIMITED";
+        list.Add(Create("Copilot CLI", cliStatus, "Direct terminal shell command translation"));
 
         return list;
+
+        static AgentCompatibility Create(string name, string status, string details) =>
+            new(name, status, details, IsReady: string.Equals(status, "READY", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
-    /// Dynamically injects model-appropriate stop sequences into an instance of <see cref="ChatCompletionOptions"/>.
+    /// Dynamically injects model-appropriate stop sequences into an instance of ChatCompletionOptions.
     /// </summary>
     public static void ConfigureStopSequences(ChatCompletionOptions options, string? modelIdentifier)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         var stops = GetStopSequences(modelIdentifier);
-
         options.StopSequences.Clear();
         foreach (var stop in stops)
         {
@@ -715,9 +669,9 @@ public static class ServerProbe
     }
 
     /// <summary>
-    /// Resolves exact turn-boundary stop tokens tailored to the target model family.
+    /// Resolves turn-boundary stop tokens tailored to the target model family.
     /// </summary>
-    public static IReadOnlyList<string> GetStopSequences(string? modelIdentifier)
+    private static IReadOnlyList<string> GetStopSequences(string? modelIdentifier)
     {
         if (string.IsNullOrWhiteSpace(modelIdentifier))
         {
@@ -728,68 +682,13 @@ public static class ServerProbe
 
         return name switch
         {
-            // Google Gemma architecture
-            _ when name.Contains("gemma") =>
-            [
-                "<end_of_turn>",
-                "<eos>",
-                "<start_of_turn>",
-                "\n<start_of_turn>"
-            ],
-
-            // DeepSeek architecture
-            _ when name.Contains("deepseek") =>
-            [
-                "<｜end of sentence｜>",
-                "<｜User｜>",
-                "User:",
-                "Assistant:"
-            ],
-
-            // Qwen family and standard ChatML format derivatives
-            _ when name.Contains("qwen") || name.Contains("chatml") || name.Contains("pulsar") =>
-            [
-                "<|im_end|>",
-                "<|im_start|>",
-                "User:",
-                "Assistant:"
-            ],
-
-            // Meta Llama 3 architectures
-            _ when name.Contains("llama-3") || name.Contains("llama3") =>
-            [
-                "<|eot_id|>",
-                "<|end_of_text|>",
-                "User:",
-                "Assistant:"
-            ],
-
-            // Microsoft Phi architectures
-            _ when name.Contains("phi-4") || name.Contains("phi-3") || name.Contains("phi") =>
-            [
-                "<|im_end|>",
-                "<|endoftext|>",
-                "User:",
-                "Assistant:"
-            ],
-
-            // Mistral / Codestral architectures
-            _ when name.Contains("mistral") || name.Contains("codestral") =>
-            [
-                "</s>",
-                "[INST]",
-                "[/INST]",
-                "User:"
-            ],
-
-            // Universal turn-boundary fallback
-            _ =>
-            [
-                "User:",
-                "\nUser:",
-                "Assistant:",
-                "\nAssistant:"
-            ]
+            _ when name.Contains("gemma") => ["<end_of_turn>", "<eos>", "<start_of_turn>", "\n<start_of_turn>"],
+            _ when name.Contains("deepseek") => ["<｜end of sentence｜>", "<｜User｜>", "User:", "Assistant:"],
+            _ when name.Contains("qwen") || name.Contains("chatml") || name.Contains("pulsar") => ["<|im_end|>", "<|im_start|>", "User:", "Assistant:"],
+            _ when name.Contains("llama-3") || name.Contains("llama3") => ["<|eot_id|>", "<|end_of_text|>", "User:", "Assistant:"],
+            _ when name.Contains("phi-4") || name.Contains("phi-3") || name.Contains("phi") => ["<|im_end|>", "<|endoftext|>", "User:", "Assistant:"],
+            _ when name.Contains("mistral") || name.Contains("codestral") => ["</s>", "[INST]", "[/INST]", "User:"],
+            _ => ["User:", "\nUser:", "Assistant:", "\nAssistant:"]
         };
     }
 }
