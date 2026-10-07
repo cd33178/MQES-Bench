@@ -31,6 +31,11 @@ public sealed record ModelAgentCapabilities
     /// </summary>
     public List<AgentCompatibility> Agents { get; init; } = new();
 
+    /// <summary>
+    /// Template capabilities
+    /// </summary>
+    public ChatTemplateCaps? TemplateCaps { get; init; }
+
     // Backward-compatibility properties
     public bool OpenCodeCompatible => Agents.FirstOrDefault(a => a.Name == "OpenCode")?.IsReady ?? false;
     public bool AiderCompatible => Agents.FirstOrDefault(a => a.Name == "Aider")?.IsReady ?? false;

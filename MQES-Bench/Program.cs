@@ -277,10 +277,11 @@ if (selectedTests.Count == 0)
 var (totalRamGb, usedRamGb, _, ramLoadPct) = SystemTelemetry.GetSystemMemoryInfo();
 var suiteTitle = string.IsNullOrWhiteSpace(suiteContainer.Name) ? Path.GetFileName(jsonFilePath) : suiteContainer.Name;
 var isDedicatedJudge = !string.Equals(endpoint, effectiveJudgeEndpoint, StringComparison.OrdinalIgnoreCase);
+var caps = capabilities.TemplateCaps;
 
 // Format all registered agents dynamically with a 16-character left column alignment
-var formattedAgents = string.Join(Environment.NewLine, capabilities.Agents.Select(a =>
-    $"  {a.Name} Agent".PadRight(23) + $": {a.Status,-7} ({a.Details})"));
+var formattedAgents = string.Join(Environment.NewLine, capabilities.Agents.OrderBy(a => a.Name).Select(a =>
+    $"  {a.Name} Agent".PadRight(23) + $": {a.Status,-12} ({a.Details})"));
 
 Console.WriteLine($"""
 ================================================================================
@@ -296,6 +297,7 @@ Console.WriteLine($"""
   LLM Endpoint         : {endpoint}
   Model                : {serverMetadata.ModelFile} ({serverMetadata.Quantization})
   Template/Jinja       : {capabilities.TemplateFamily} (Tools: {(capabilities.SupportsTools ? "Supported" : "None")})
+  Template Engine      : {(capabilities.TemplateCaps is { } c ? $"ParallelTools={c.SupportsParallelToolCalls}, ObjectArgs={c.SupportsObjectArguments}, SystemRole={c.SupportsSystemRole}, Reasoning={c.SupportsPreserveReasoning}" : "N/A (Legacy Endpoint)")}
   Tool Syntax          : {capabilities.ToolCallSyntax}
 {formattedAgents}
   Stop Tokens          : {(capabilities.StopTokens.Count > 0 ? string.Join(", ", capabilities.StopTokens).Replace("\r", " ").Replace("\n", " ") : "Default fallback")}

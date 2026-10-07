@@ -239,17 +239,16 @@ public static class ServerProbe
 
             var chatTemplate = string.Empty;
             var stopTokens = new List<string>();
-            var serverCapsSupportsTools = false;
+            ChatTemplateCaps? templateCaps = null;
 
             // 1. Query /props for runtime template and tool capabilities
             try
             {
                 var propsJson = await http.GetFromJsonAsync<JsonElement>($"{baseUri}/props", ct);
 
-                if (propsJson.TryGetProperty("chat_template_caps", out var caps) &&
-                    caps.TryGetProperty("supports_tool_calls", out var stc))
+                if (propsJson.TryGetProperty("chat_template_caps", out var capsElement))
                 {
-                    serverCapsSupportsTools = stc.GetBoolean();
+                    templateCaps = ChatTemplateCaps.FromJsonElement(capsElement);
                 }
 
                 if (propsJson.TryGetProperty("default_generation_settings", out var genSettings))
@@ -304,7 +303,7 @@ public static class ServerProbe
 
             var family = InferTemplateFamily(chatTemplate, modelIdentifier);
 
-            var toolsVerified = probeResult.HasNativeToolCalls || (serverCapsSupportsTools && probeResult.ExecutedSuccessfully);
+            var toolsVerified = probeResult.HasNativeToolCalls || (templateCaps?.SupportsToolCalls == true && probeResult.ExecutedSuccessfully);
 
             var toolSyntax = probeResult.DetectedToolSyntax != "None"
                 ? probeResult.DetectedToolSyntax
@@ -320,7 +319,8 @@ public static class ServerProbe
                 SupportsTools = toolsVerified,
                 ToolCallSyntax = toolSyntax,
                 StopTokens = resolvedStops,
-                Agents = EvaluateAgents(family, toolsVerified, modelIdentifier)
+                Agents = EvaluateAgents(family, toolsVerified, templateCaps, modelIdentifier),
+                TemplateCaps = templateCaps
             };
         }
         catch
@@ -583,7 +583,11 @@ public static class ServerProbe
     /// <summary>
     /// Evaluates compatibility across 12 distinct coding agents, autonomous frameworks, and IDE assistants.
     /// </summary>
-    private static List<AgentCompatibility> EvaluateAgents(string family, bool toolsVerified, string? modelIdentifier)
+    private static List<AgentCompatibility> EvaluateAgents(
+            string family,
+            bool toolsVerified,
+            ChatTemplateCaps? caps,
+            string? modelIdentifier)
     {
         var list = new List<AgentCompatibility>();
 
@@ -594,58 +598,58 @@ public static class ServerProbe
 
         var isModernTemplate = family is "ChatML" or "Mistral" or "Llama-3" or "Gemma" or "DeepSeek" || (toolsVerified && family == "Standard");
 
-        // 1. Autonomous Multi-Tool Coding Agents (CLI & IDE)
-        list.Add(Create("Claude Code", toolStatus,
-            toolsVerified ? "Terminal tool calling and multi-turn diff execution ready" : "Requires verified tool calls for terminal automation"));
+        // 1. Claude Code
+        var claudeCodeReady = toolsVerified && (caps == null || caps.SupportsObjectArguments);
+        var claudeCodeDetails = claudeCodeReady
+            ? (caps?.SupportsParallelToolCalls == true
+                ? "Terminal tool calling, multi-turn diffs & parallel executions ready"
+                : "Sequential tool calling ready (no parallel execution)")
+            : "Requires verified object argument tool calls";
 
-        list.Add(Create("Claude Desktop", toolStatus,
-            toolsVerified ? "Native tool-calling verified for Model Context Protocol (MCP)" : "Cannot invoke MCP developer toolkits"));
+        list.Add(Create("Claude Code", claudeCodeReady ? "READY" : "INCOMPATIBLE", claudeCodeDetails));
 
+        // 2. Claude Desktop & MCP
+        var mcpReady = toolsVerified && (caps == null || caps.SupportsObjectArguments);
+        list.Add(Create("Claude Desktop", mcpReady ? "READY" : "INCOMPATIBLE",
+            mcpReady ? "Native tool-calling verified for Model Context Protocol (MCP)" : "Cannot parse complex MCP schema objects"));
+
+        // 3. Cline
         list.Add(Create("Cline", toolStatus,
             toolsVerified ? "Native OpenAI tool_calls verified with valid JSON arguments" : "Cannot invoke file/system tools"));
 
+        // 4. Goose & OpenCode
         list.Add(Create("Goose", toolStatus,
             toolsVerified ? "Native tool_calls verified for developer toolkits" : "Cannot invoke MCP developer toolkits"));
-
-        list.Add(Create("Hermes Agent", toolsVerified || family == "ChatML" ? "READY" : "LIMITED",
-            "Supports ChatML / Nous Hermes function calling protocols"));
-
         list.Add(Create("OpenCode", toolStatus, toolReason));
 
+        // 5. OpenHands & Roo Code
         list.Add(Create("OpenHands", toolStatus,
             toolsVerified ? "Action serialization verified" : "Action serialization fails without tools"));
-
         list.Add(Create("Roo Code", toolStatus,
             toolsVerified ? "Multi-mode autonomous tool calling and AST inspection verified" : toolReason));
-
         list.Add(Create("SWE-agent", toolStatus,
             toolsVerified ? "ACI command generation via function calls" : "Cannot execute ACI tool commands"));
 
-        // 2. Diff & Edit Format Agents (Aider / Mentat)
+        // 6. Diff & Git Editing Agents
         var diffStatus = isModernTemplate || toolsVerified ? "READY" : "LIMITED";
         list.Add(Create("Aider", diffStatus,
             diffStatus == "READY" ? "Template supports multi-turn search/replace diff editing" : "Fallback to --edit-format whole"));
-
         list.Add(Create("Mentat", diffStatus,
             diffStatus == "READY" ? "Template supports multi-turn search/replace diff editing" : "May fail AST diff application"));
 
-        // 3. Workspace Context & Desktop Assistants
+        // 7. Workspace Context & IDE Assistants
         list.Add(Create("Continue", "READY", "Chat, code completion, and context (@workspace) ready"));
-
-        list.Add(Create("Avante.nvim", toolsVerified ? "READY" : "LIMITED",
-            toolsVerified ? "Full project codebase planning & AST tool support" : "Limited to direct buffer completion"));
-
         list.Add(Create("Cursor/Windsurf", toolsVerified ? "READY" : "LIMITED",
             toolsVerified ? "Autonomous multi-file editing mode" : "Degrades to standard inline diff mode"));
-
+        list.Add(Create("Avante.nvim", toolsVerified ? "READY" : "LIMITED",
+            toolsVerified ? "Full project codebase planning & AST tool support" : "Limited to direct buffer completion"));
         list.Add(Create("Plandex", toolsVerified ? "READY" : "LIMITED",
             toolsVerified ? "Multi-file transaction planning and tool execution" : "Fails branch plan serialization"));
 
-        // 4. Terminal Command Line Shell Agents
+        // 8. Terminal Shell
         var lower = (modelIdentifier ?? string.Empty).ToLowerInvariant();
         var isInstruct = lower.Contains("instruct") || lower.Contains("coder") || lower.Contains("-it") || lower.Contains("_it") || lower.Contains("sonnet");
-        var cliStatus = isInstruct || toolsVerified ? "READY" : "LIMITED";
-        list.Add(Create("Copilot CLI", cliStatus, "Direct terminal shell command translation"));
+        list.Add(Create("Copilot CLI", isInstruct || toolsVerified ? "READY" : "LIMITED", "Direct terminal shell command translation"));
 
         return list;
 
