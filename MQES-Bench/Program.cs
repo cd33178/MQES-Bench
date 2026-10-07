@@ -277,7 +277,6 @@ if (selectedTests.Count == 0)
 var (totalRamGb, usedRamGb, _, ramLoadPct) = SystemTelemetry.GetSystemMemoryInfo();
 var suiteTitle = string.IsNullOrWhiteSpace(suiteContainer.Name) ? Path.GetFileName(jsonFilePath) : suiteContainer.Name;
 var isDedicatedJudge = !string.Equals(endpoint, effectiveJudgeEndpoint, StringComparison.OrdinalIgnoreCase);
-var caps = capabilities.TemplateCaps;
 
 // Format all registered agents dynamically with a 16-character left column alignment
 var formattedAgents = string.Join(Environment.NewLine, capabilities.Agents.OrderBy(a => a.Name).Select(a =>
@@ -529,7 +528,7 @@ try
                 0.0,
                 0.0,
                 [],
-                [.. test.Criteria.Select(c => c.Description)],
+                [.. test.Criteria.Select(criterion => criterion.Description)],
                 totalGenTokens,
                 metricsFailed,
                 totalGenTokens,
